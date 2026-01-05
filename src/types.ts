@@ -438,3 +438,70 @@ export function recover<
       `Provide a handler for "${kind}" or a catch-all "_" handler.`
   )
 }
+
+/**
+ * Handler function type for inspect.
+ * Receives the error and performs side effects (returns void).
+ */
+export type InspectHandler<
+  Kind extends string,
+  T extends Record<string, unknown>,
+> = (error: Err<Kind, Partial<T>>) => void
+
+/**
+ * Handlers object for inspect method.
+ * Partial mapping of error kinds to handler functions (all optional).
+ */
+export type InspectHandlers<
+  Kinds extends string,
+  T extends Record<string, unknown>,
+> = {
+  [K in Kinds]?: InspectHandler<K, T>
+}
+
+/**
+ * Observes errors without changing the type or control flow.
+ *
+ * Does nothing if the value is not an error.
+ * For errors, calls the matching handler if provided.
+ * Does not modify the result value - useful for logging, metrics, auditing.
+ *
+ * @param value - The result value (success or error)
+ * @param guard - The set-level guard to check errors
+ * @param handlers - Partial object mapping error kinds to handlers
+ * @returns void
+ *
+ * @example
+ * ```ts
+ * inspect(result, UserError, {
+ *   suspended: (e) => audit.log(`Blocked user: ${e.data.id}`),
+ *   not_found: (e) => metrics.increment("user.not_found"),
+ * })
+ * // result type unchanged - continue with normal flow
+ * ```
+ */
+export function inspect<
+  Success,
+  Kinds extends string,
+  T extends Record<string, unknown>,
+>(
+  value: Success | Err<Kinds, Partial<T>>,
+  guard: SetGuard<Kinds, T>,
+  handlers: InspectHandlers<Kinds, T>
+): void {
+  // If not an error, do nothing
+  if (!guard(value)) {
+    return
+  }
+
+  // Value is an error - look for matching handler
+  const error = value as Err<Kinds, Partial<T>>
+  const kind = error.kind as Kinds
+
+  // Call specific handler if provided
+  const handler = handlers[kind]
+  if (handler !== undefined) {
+    handler(error as Err<typeof kind, Partial<T>>)
+  }
+  // No handler for this kind - that's fine, do nothing
+}
