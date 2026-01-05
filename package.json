@@ -1,0 +1,20 @@
+{
+  "name": "errorset",
+  "module": "index.ts",
+  "type": "module",
+  "devDependencies": {
+    "@biomejs/biome": "2.3.11",
+    "@types/bun": "latest",
+    "lefthook": "^2.0.13",
+    "ultracite": "7.0.8"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "backlog": "^0.0.3"
+  },
+  "scripts": {
+    "prepare": "lefthook install"
+  }
+}
