@@ -274,21 +274,28 @@ export function createKindFunction<
 export type SetGuard<
   Kinds extends string,
   T extends Record<string, unknown>,
-> = (value: unknown) => value is Err<Kinds, Partial<T>>
+> = ((value: unknown) => value is Err<Kinds, Partial<T>>) & {
+  /** Symbol.hasInstance for instanceof support */
+  [Symbol.hasInstance](value: unknown): value is Err<Kinds, Partial<T>>
+}
 
 /**
  * Creates a set-level type guard for an error set.
  * Returns true if the value is any error from this set.
+ * Also supports instanceof operator via Symbol.hasInstance.
  *
  * @param kinds - Array of valid error kinds for this set
- * @returns A type guard function
+ * @returns A type guard function with instanceof support
  *
  * @example
  * ```ts
- * const isUserError = createSetGuard<"not_found" | "invalid", User>(["not_found", "invalid"])
- * if (isUserError(result)) {
- *   // result is Err<"not_found" | "invalid", Partial<User>>
- * }
+ * const UserError = createSetGuard<"not_found" | "invalid", User>(["not_found", "invalid"])
+ *
+ * // Callable guard:
+ * if (UserError(result)) { ... }
+ *
+ * // instanceof syntax:
+ * if (result instanceof UserError) { ... }
  * ```
  *
  * @internal
@@ -297,7 +304,7 @@ export function createSetGuard<
   Kinds extends string,
   T extends Record<string, unknown>,
 >(kinds: Kinds[]): SetGuard<Kinds, T> {
-  return (value: unknown): value is Err<Kinds, Partial<T>> => {
+  const guard = (value: unknown): value is Err<Kinds, Partial<T>> => {
     // Must be a non-null object
     if (value === null || typeof value !== "object") {
       return false
@@ -319,4 +326,14 @@ export function createSetGuard<
 
     return kinds.includes(kind as Kinds)
   }
+
+  // Add Symbol.hasInstance for instanceof support
+  Object.defineProperty(guard, Symbol.hasInstance, {
+    value: (value: unknown): boolean => guard(value),
+    writable: false,
+    enumerable: false,
+    configurable: false,
+  })
+
+  return guard as SetGuard<Kinds, T>
 }
