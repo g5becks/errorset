@@ -203,3 +203,57 @@ export function createKindConstructor<
     return creator
   }
 }
+
+/**
+ * Type for the set-level guard function.
+ * Checks if a value is any error from this error set.
+ */
+export type SetGuard<
+  Kinds extends string,
+  T extends Record<string, unknown>,
+> = (value: unknown) => value is Err<Kinds, Partial<T>>
+
+/**
+ * Creates a set-level type guard for an error set.
+ * Returns true if the value is any error from this set.
+ *
+ * @param kinds - Array of valid error kinds for this set
+ * @returns A type guard function
+ *
+ * @example
+ * ```ts
+ * const isUserError = createSetGuard<"not_found" | "invalid", User>(["not_found", "invalid"])
+ * if (isUserError(result)) {
+ *   // result is Err<"not_found" | "invalid", Partial<User>>
+ * }
+ * ```
+ *
+ * @internal
+ */
+export function createSetGuard<
+  Kinds extends string,
+  T extends Record<string, unknown>,
+>(kinds: Kinds[]): SetGuard<Kinds, T> {
+  return (value: unknown): value is Err<Kinds, Partial<T>> => {
+    // Must be a non-null object
+    if (value === null || typeof value !== "object") {
+      return false
+    }
+
+    // Must have ERR symbol set to true
+    if (
+      !(ERR in value) ||
+      (value as Record<typeof ERR, unknown>)[ERR] !== true
+    ) {
+      return false
+    }
+
+    // Must have a kind property that is in our set
+    const kind = (value as Record<string, unknown>).kind
+    if (typeof kind !== "string") {
+      return false
+    }
+
+    return kinds.includes(kind as Kinds)
+  }
+}

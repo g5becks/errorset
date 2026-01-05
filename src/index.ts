@@ -20,10 +20,12 @@ export {
 // Core types and constants
 export {
   createKindConstructor,
+  createSetGuard,
   ERR,
   type Err,
   type ErrorCreator,
   type ErrorOptions,
   isErr,
   type KindConstructor,
+  type SetGuard,
 } from "./types.ts"
