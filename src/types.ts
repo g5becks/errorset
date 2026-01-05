@@ -505,3 +505,82 @@ export function inspect<
   }
   // No handler for this kind - that's fine, do nothing
 }
+
+/**
+ * Extended SetGuard with kinds array for merge operations.
+ * Internal type used to access the kinds from a guard.
+ */
+export type SetGuardWithKinds<
+  Kinds extends string,
+  T extends Record<string, unknown>,
+> = SetGuard<Kinds, T> & {
+  /** Array of valid kinds for this set */
+  readonly kinds: readonly Kinds[]
+}
+
+/**
+ * Creates a set-level type guard with accessible kinds array.
+ * This is used internally for merge operations.
+ *
+ * @param kinds - Array of valid error kinds for this set
+ * @returns A type guard function with kinds array and instanceof support
+ *
+ * @internal
+ */
+export function createSetGuardWithKinds<
+  Kinds extends string,
+  T extends Record<string, unknown>,
+>(kinds: readonly Kinds[]): SetGuardWithKinds<Kinds, T> {
+  const guard = createSetGuard<Kinds, T>(kinds as Kinds[])
+
+  // Add kinds array to the guard
+  Object.defineProperty(guard, "kinds", {
+    value: kinds,
+    writable: false,
+    enumerable: false,
+    configurable: false,
+  })
+
+  return guard as SetGuardWithKinds<Kinds, T>
+}
+
+/**
+ * Merges two error set guards into a unified guard.
+ *
+ * The merged guard checks for errors from either original set.
+ * Data becomes untyped (Record<string, unknown>) since sets may have different entity types.
+ * Original sets remain unchanged.
+ *
+ * @param guard1 - First error set guard
+ * @param guard2 - Second error set guard
+ * @returns A new guard that matches errors from either set
+ *
+ * @example
+ * ```ts
+ * const UserError = createSetGuardWithKinds<"not_found" | "suspended", User>(["not_found", "suspended"])
+ * const OrderError = createSetGuardWithKinds<"cancelled" | "expired", Order>(["cancelled", "expired"])
+ *
+ * const ServiceError = merge(UserError, OrderError)
+ * // ServiceError matches "not_found" | "suspended" | "cancelled" | "expired"
+ * ```
+ */
+export function merge<
+  Kinds1 extends string,
+  T1 extends Record<string, unknown>,
+  Kinds2 extends string,
+  T2 extends Record<string, unknown>,
+>(
+  guard1: SetGuardWithKinds<Kinds1, T1>,
+  guard2: SetGuardWithKinds<Kinds2, T2>
+): SetGuardWithKinds<Kinds1 | Kinds2, Record<string, unknown>> {
+  // Combine kinds from both guards
+  const combinedKinds = [...guard1.kinds, ...guard2.kinds] as (
+    | Kinds1
+    | Kinds2
+  )[]
+
+  // Create new guard with combined kinds
+  return createSetGuardWithKinds<Kinds1 | Kinds2, Record<string, unknown>>(
+    combinedKinds
+  )
+}

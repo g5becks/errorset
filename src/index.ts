@@ -21,6 +21,7 @@ export {
 export {
   createKindFunction,
   createSetGuard,
+  createSetGuardWithKinds,
   ERR,
   type Err,
   type ErrorCreator,
@@ -32,8 +33,10 @@ export {
   type KindConstructor,
   type KindFunction,
   type KindGuard,
+  merge,
   type RecoverHandler,
   type RecoverHandlers,
   recover,
   type SetGuard,
+  type SetGuardWithKinds,
 } from "./types.ts"
