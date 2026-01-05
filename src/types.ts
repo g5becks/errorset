@@ -3,7 +3,7 @@
  * @module types
  */
 
-import { getConfig } from "./config.ts"
+import { type Config, getConfig } from "./config.ts"
 
 /**
  * Unique symbol used to brand error objects.
@@ -133,6 +133,19 @@ export type KindFunction<
 > = KindConstructor<Kind, T> & KindGuard<Kind, T>
 
 /**
+ * Options for creating an error set with object syntax.
+ * Alternative to positional arguments for errorSet().
+ */
+export type ErrorSetOptions = {
+  /** Name of the error set (for debugging, e.g., "UserError") */
+  name: string
+  /** Error kinds (e.g., ["not_found", "suspended"]) */
+  kinds: string[]
+  /** Optional per-instance configuration overrides */
+  config?: Partial<Config>
+}
+
+/**
  * Captures a stack trace on the target object if available (V8 engines only).
  * This is a zero-cost operation in non-V8 environments.
  *
@@ -140,8 +153,16 @@ export type KindFunction<
  * @param constructorOpt - Function to exclude from stack trace
  * @internal
  */
-function captureStack(target: object, constructorOpt?: unknown): void {
-  const config = getConfig()
+function captureStack(
+  target: object,
+  constructorOpt?: unknown,
+  instanceConfig?: Partial<Config>
+): void {
+  const globalConfig = getConfig()
+  const config = instanceConfig
+    ? { ...globalConfig, ...instanceConfig }
+    : globalConfig
+
   if (!config.includeStack) {
     return
   }
@@ -190,7 +211,11 @@ function captureStack(target: object, constructorOpt?: unknown): void {
 export function createKindFunction<
   Kind extends string,
   T extends Record<string, unknown>,
->(kind: Kind, name: string): KindFunction<Kind, T> {
+>(
+  kind: Kind,
+  name: string,
+  instanceConfig?: Partial<Config>
+): KindFunction<Kind, T> {
   // The dual-purpose function
   const kindFn = <K extends keyof T & string>(
     stringsOrValue: TemplateStringsArray | object | null | undefined,
@@ -240,7 +265,7 @@ export function createKindFunction<
         } as Err<Kind, Pick<T, K>>
 
         // Capture stack trace if enabled (V8 engines only)
-        captureStack(err, creator)
+        captureStack(err, creator, instanceConfig)
 
         return err
       }
@@ -765,17 +790,24 @@ export type ErrorSet<
  * ```
  */
 export function errorSet<T extends Record<string, unknown>>(
-  name: string,
+  nameOrOptions: string | ErrorSetOptions,
   ...kinds: string[]
 ): ErrorSet<string, T> {
+  // Detect which API form is being used
+  const isOptionsObject =
+    typeof nameOrOptions === "object" && nameOrOptions !== null
+  const name = isOptionsObject ? nameOrOptions.name : nameOrOptions
+  const kindsList = isOptionsObject ? nameOrOptions.kinds : kinds
+  const instanceConfig = isOptionsObject ? nameOrOptions.config : undefined
+
   // Create the base guard with kinds array
-  const guard = createSetGuardWithKinds<string, T>(kinds)
+  const guard = createSetGuardWithKinds<string, T>(kindsList)
 
   // Create kind functions and attach to guard
   const errorSetObj = guard as unknown as ErrorSet<string, T>
 
-  for (const kind of kinds) {
-    const kindFn = createKindFunction<string, T>(kind, name)
+  for (const kind of kindsList) {
+    const kindFn = createKindFunction<string, T>(kind, name, instanceConfig)
     Object.defineProperty(errorSetObj, kind, {
       value: kindFn,
       writable: false,

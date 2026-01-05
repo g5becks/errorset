@@ -30,6 +30,7 @@ export {
   type ErrorMapper,
   type ErrorOptions,
   type ErrorSet,
+  type ErrorSetOptions,
   errorSet,
   type InspectHandler,
   type InspectHandlers,

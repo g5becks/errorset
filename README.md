@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./logo.png" alt="errorset logo" width="200" />
+  <img src="./logo.png" alt="errorset logo" width="300" />
 </p>
 
 # errorset
@@ -117,6 +117,32 @@ function getUser(id: string): User | UserError { ... }
 // In value position (runtime guards)
 if (UserError(result)) { ... }
 ```
+
+### Alternative Object Syntax
+
+You can also create error sets with an options object:
+
+```typescript
+const UserError = errorSet<User>({
+  name: "UserError",
+  kinds: ["not_found", "suspended", "invalid"]
+});
+```
+
+This form supports **per-instance configuration** that overrides global settings:
+
+```typescript
+const VerboseError = errorSet<User>({
+  name: "VerboseError",
+  kinds: ["error"],
+  config: {
+    includeStack: true,
+    format: "pretty"
+  }
+});
+```
+
+Per-instance config only affects that error set — other sets continue using global config.
 
 ---
 
@@ -423,7 +449,8 @@ console.log(err);
 
 | API | Purpose |
 |---|---|
-| `errorSet<T>(name, ...kinds)` | Define error set |
+| `errorSet<T>(name, ...kinds)` | Define error set (positional) |
+| `errorSet<T>({ name, kinds, config? })` | Define error set (object) |
 | `type X = typeof X.Type` | Type-value identity |
 | `Set.kind\`msg\`(data)` | Create error |
 | `Set.kind\`msg\`(data, { cause })` | Create with cause |
