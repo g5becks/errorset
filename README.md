@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="./logo.png" alt="errorset logo" width="200" />
+</p>
+
 # errorset
 
 **Domain-bound, type-safe error handling for TypeScript, inspired by Zig.**
