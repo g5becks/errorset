@@ -9,5 +9,13 @@
  * @module errorset
  */
 
+// Configuration
+export {
+  type Config,
+  configure,
+  type Format,
+  getConfig,
+  resetConfig,
+} from "./config.ts"
 // Core types and constants
 export { ERR, type Err } from "./types.ts"
