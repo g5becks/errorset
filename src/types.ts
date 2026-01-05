@@ -193,7 +193,7 @@ export function createKindFunction<
 >(kind: Kind, name: string): KindFunction<Kind, T> {
   // The dual-purpose function
   const kindFn = <K extends keyof T & string>(
-    stringsOrValue: TemplateStringsArray | unknown,
+    stringsOrValue: TemplateStringsArray | object | null | undefined,
     ...keys: K[]
   ): ErrorCreator<Kind, T, K> | boolean => {
     // Check if called as tagged template literal
@@ -413,17 +413,17 @@ export function recover<
 ): Success | R {
   // If not an error, return success value unchanged
   if (!guard(value)) {
-    return value as Success
+    return value
   }
 
   // Value is an error - look for matching handler
-  const error = value as Err<Kinds, Partial<T>>
-  const kind = error.kind as Kinds
+  const error = value
+  const kind = error.kind
 
   // Try specific handler first
   const specificHandler = handlers[kind]
   if (specificHandler !== undefined) {
-    return specificHandler(error as Err<typeof kind, Partial<T>>)
+    return specificHandler(error)
   }
 
   // Fall back to catch-all handler
@@ -495,13 +495,13 @@ export function inspect<
   }
 
   // Value is an error - look for matching handler
-  const error = value as Err<Kinds, Partial<T>>
-  const kind = error.kind as Kinds
+  const error = value
+  const kind = error.kind
 
   // Call specific handler if provided
   const handler = handlers[kind]
   if (handler !== undefined) {
-    handler(error as Err<typeof kind, Partial<T>>)
+    handler(error)
   }
   // No handler for this kind - that's fine, do nothing
 }
@@ -624,9 +624,9 @@ export function captureSync<
 ): T | Err<Kinds, Partial<Data>> {
   try {
     return fn()
-  } catch (caught) {
+  } catch (error_) {
     // Convert non-Error values to Error objects
-    const error = caught instanceof Error ? caught : new Error(String(caught))
+    const error = error_ instanceof Error ? error_ : new Error(String(error_))
     return mapper(error)
   }
 }
@@ -661,9 +661,9 @@ export async function captureAsync<
 ): Promise<T | Err<Kinds, Partial<Data>>> {
   try {
     return await fn()
-  } catch (caught) {
+  } catch (error_) {
     // Convert non-Error values to Error objects
-    const error = caught instanceof Error ? caught : new Error(String(caught))
+    const error = error_ instanceof Error ? error_ : new Error(String(error_))
     return mapper(error)
   }
 }
@@ -730,10 +730,10 @@ export type ErrorSet<
   ): Promise<Result | Err<Kinds, Partial<T>>>
 
   /**
-   * Iterator for error kinds.
+   * Iterator for error kind names.
    * Allows for...of loops and spread syntax.
    */
-  [Symbol.iterator](): IterableIterator<Kinds>
+  [Symbol.iterator](): IterableIterator<string>
 }
 
 /**
@@ -819,7 +819,7 @@ export function errorSet<T extends Record<string, unknown>>(
     value: <Kinds2 extends string, T2 extends Record<string, unknown>>(
       other: SetGuardWithKinds<Kinds2, T2>
     ): SetGuardWithKinds<string | Kinds2, Record<string, unknown>> =>
-      merge(guard as SetGuardWithKinds<string, T>, other),
+      merge(guard, other),
     writable: false,
     enumerable: false,
     configurable: false,

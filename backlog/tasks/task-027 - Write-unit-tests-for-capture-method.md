@@ -1,9 +1,10 @@
 ---
 id: task-027
 title: Write unit tests for capture method
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-01-05 15:41'
+updated_date: '2026-01-05 16:33'
 labels:
   - testing
   - unit
@@ -29,3 +30,9 @@ Create comprehensive tests for the capture() method covering both sync and async
 - [ ] #8 Coverage for capture reaches 100%
 - [ ] #9 bun run typecheck passes with no errors
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+captureSync() and captureAsync() fully tested in helpers.test.ts: error wrapping, success pass-through
+<!-- SECTION:NOTES:END -->

@@ -1,9 +1,10 @@
 ---
 id: task-023
 title: Write unit tests for guards
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-01-05 15:41'
+updated_date: '2026-01-05 16:32'
 labels:
   - testing
   - unit
@@ -29,3 +30,9 @@ Create comprehensive tests for both set-level and kind-level guards, including i
 - [ ] #8 Coverage for guards reaches 100%
 - [ ] #9 bun run typecheck passes with no errors
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Guards tested: set-level guard, kind-level guard, instanceof support, edge cases for null/undefined/primitives
+<!-- SECTION:NOTES:END -->
