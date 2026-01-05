@@ -1,6 +1,23 @@
 {
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
-  "extends": [
-    "ultracite/biome/core"
-  ]
+  "extends": ["ultracite/biome/core"],
+  "javascript": {
+    "formatter": {
+      "semicolons": "asNeeded",
+      "arrowParentheses": "asNeeded"
+    }
+  },
+  "linter": {
+    "rules": {
+      "style": {
+        // Allow type aliases for complex types with computed symbol keys
+        // which cannot be expressed as interfaces
+        "useConsistentTypeDefinitions": "off"
+      },
+      "performance": {
+        // Allow barrel files for the public API entry point
+        "noBarrelFile": "off"
+      }
+    }
+  }
 }

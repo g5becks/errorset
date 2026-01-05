@@ -9,5 +9,5 @@
  * @module errorset
  */
 
-// Placeholder exports - will be implemented in subsequent tasks
-export {}
+// Core types and constants
+export { ERR, type Err } from "./types.ts"
