@@ -264,6 +264,23 @@ export function createKindFunction<
     return (value as Record<string, unknown>).kind === kind
   }
 
+  // Add string coercion support
+  // Allows: `Error type: ${UserError.not_found}` => "Error type: not_found"
+  Object.defineProperty(kindFn, "toString", {
+    value: () => kind,
+    writable: false,
+    enumerable: false,
+    configurable: false,
+  })
+
+  // Symbol.toPrimitive for type coercion in comparisons and template literals
+  Object.defineProperty(kindFn, Symbol.toPrimitive, {
+    value: () => kind,
+    writable: false,
+    enumerable: false,
+    configurable: false,
+  })
+
   return kindFn as KindFunction<Kind, T>
 }
 
