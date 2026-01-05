@@ -17,6 +17,12 @@ export const ERR: unique symbol = Symbol("err")
 export type ERR = typeof ERR
 
 /**
+ * Symbol for custom Node.js inspect output.
+ * Used to provide clean console.log() output for errors.
+ */
+export const INSPECT: unique symbol = Symbol.for("nodejs.util.inspect.custom")
+
+/**
  * Core error type representing a domain-bound error value.
  *
  * @typeParam Kind - String literal type for the error kind (e.g., "not_found")
@@ -110,7 +116,7 @@ export type KindConstructor<
  * This is an internal function used by errorSet().
  *
  * @param kind - The error kind string
- * @param _name - The error set name (for debugging)
+ * @param name - The error set name (for debugging)
  * @returns A tagged template function that creates errors
  *
  * @internal
@@ -118,7 +124,7 @@ export type KindConstructor<
 export function createKindConstructor<
   Kind extends string,
   T extends Record<string, unknown>,
->(kind: Kind, _name: string): KindConstructor<Kind, T> {
+>(kind: Kind, name: string): KindConstructor<Kind, T> {
   return <K extends keyof T & string>(
     strings: TemplateStringsArray,
     ...keys: K[]
@@ -137,19 +143,24 @@ export function createKindConstructor<
       let message = strings[0] ?? ""
       for (let i = 0; i < keys.length; i++) {
         const key = keys[i]
-        const value = key !== undefined ? entity[key] : undefined
+        const value = key === undefined ? undefined : entity[key]
         message += String(value ?? "")
         message += strings[i + 1] ?? ""
       }
 
-      // Create error object
-      const err: Err<Kind, Pick<T, K>> = {
+      // Create error object with custom inspect for debuggers
+      const err = {
         [ERR]: true,
         kind,
         message,
         data: data as Pick<T, K>,
         ...(options?.cause !== undefined && { cause: options.cause }),
-      }
+        // Custom inspection for Node.js debuggers
+        // Format: ErrorSetName.kind { data }
+        [INSPECT]() {
+          return `${name}.${kind} ${JSON.stringify(data)}`
+        },
+      } as Err<Kind, Pick<T, K>>
 
       return err
     }
