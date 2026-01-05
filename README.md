@@ -485,12 +485,14 @@ JavaScript has more in common with Lua, Lisp, and Clojure than it does with Hask
 
 ### Errors Are Just Data
 
-The most elegant error handling I've found for this paradigm comes from Zig: **errors are values, returned alongside success values in a union**. No wrapping. No unwrapping. No special return type — just `User | UserError`.
+The most elegant error handling I've found for this paradigm draws inspiration from both **Go** and **Zig**: errors are values, returned alongside success values. No wrapping. No unwrapping. No special return type — just `User | UserError`.
 
-This library takes that idea and adapts it to TypeScript:
+That said, neither approach is without faults. Go's `if err != nil` is verbose and error values often lack structure. Zig's error sets are elegant but notoriously difficult to attach context to — you get an error code, but adding "which user?" or "what query failed?" requires workarounds.
 
-- You don't wrap your return types in `Result<T, E>`
-- You don't unwrap with `.match()` or `.fold()`
+This library takes the best of both and adapts it to TypeScript's strengths:
+
+- Errors are plain objects in a union — no `Result<T, E>` wrapper
+- Template literals automatically extract context into structured `data`
 - You use native `if` statements and `switch` expressions
 - TypeScript's type narrowing handles the rest
 
