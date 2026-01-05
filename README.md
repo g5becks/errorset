@@ -465,10 +465,46 @@ console.log(err);
 | `Set.captureAsync(fn, map)` | Wrap async code |
 | `[...Set]` | Iterate kinds |
 | `configure(options)` | Set global options |
-
 ---
 
 ## Philosophy
+
+### When in Rome
+
+I've spent 16 years building software — 8 of those in TypeScript, and a significant portion in functional languages like Scala and F#. I have no issue with the `Result` type. I have no issue with category theory. What I *do* have an issue with is shoehorning functional idioms into languages where they don't belong.
+
+When I write C#, I use object-oriented patterns and SOLID principles. When I write F#, I use discriminated unions and railway-oriented programming. **When in Rome, do as the Romans do.**
+
+Libraries that force the `Result` type into TypeScript codebases often ignore the practical cost: `Result<T, E>` litters your entire codebase. Every function that could fail must return a wrapped type. Every caller must unwrap it. You end up with `.map()`, `.flatMap()`, and `.bind()` chains everywhere — functional ceremony in a language that isn't fundamentally functional.
+
+### JavaScript Is Data-Oriented
+
+If I had to categorize JavaScript (and by extension TypeScript), it wouldn't be functional. It wouldn't be object-oriented. It would be **data-oriented**.
+
+JavaScript has more in common with Lua, Lisp, and Clojure than it does with Haskell or Java. Functions are data. Objects are just bags of properties. The language wants you to pass data around and transform it with plain functions. TypeScript's powerful type system can fool you into thinking you should impose structure from other paradigms, but the underlying language resists it.
+
+### Errors Are Just Data
+
+The most elegant error handling I've found for this paradigm comes from Zig: **errors are values, returned alongside success values in a union**. No wrapping. No unwrapping. No special return type — just `User | UserError`.
+
+This library takes that idea and adapts it to TypeScript:
+
+- You don't wrap your return types in `Result<T, E>`
+- You don't unwrap with `.match()` or `.fold()`
+- You use native `if` statements and `switch` expressions
+- TypeScript's type narrowing handles the rest
+
+### Domain Errors, Not All Errors
+
+This library doesn't aim to replace `try/catch` everywhere. Those constructs still have a place.
+
+The target is **domain errors** — the well-defined failure modes within your business logic. User not found. Payment declined. Validation failed. These are expected outcomes that deserve explicit types and structured handling.
+
+In the infrastructure layer, you might still catch database exceptions. In the application layer, you might wrap third-party APIs that throw. That's fine. `capture` and `captureAsync` exist precisely for bridging that world into typed error values at your domain boundary.
+
+The goal is simple: within your domain, you should know exactly what can fail and handle it with the same clarity you bring to your success paths.
+
+### Design Principles
 
 1. **Expected failures are values** — not exceptions, not special monads
 2. **Domain binding** — errors know their entity type
