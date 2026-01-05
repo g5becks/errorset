@@ -18,4 +18,12 @@ export {
   resetConfig,
 } from "./config.ts"
 // Core types and constants
-export { ERR, type Err, isErr } from "./types.ts"
+export {
+  createKindConstructor,
+  ERR,
+  type Err,
+  type ErrorCreator,
+  type ErrorOptions,
+  isErr,
+  type KindConstructor,
+} from "./types.ts"

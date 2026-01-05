@@ -74,3 +74,84 @@ export function isErr(
     (value as Record<typeof ERR, unknown>)[ERR] === true
   )
 }
+
+/**
+ * Options for error creation.
+ */
+export type ErrorOptions = {
+  /** Optional wrapped error that caused this error */
+  cause?: Err<string, Record<string, unknown>>
+}
+
+/**
+ * Function returned by template literal that creates the error.
+ * Accepts entity data and optional error options.
+ */
+export type ErrorCreator<
+  Kind extends string,
+  T extends Record<string, unknown>,
+  K extends keyof T,
+> = (entity: Pick<T, K>, options?: ErrorOptions) => Err<Kind, Pick<T, K>>
+
+/**
+ * Tagged template function for a specific error kind.
+ * Constrains template holes to valid field names from the entity type.
+ */
+export type KindConstructor<
+  Kind extends string,
+  T extends Record<string, unknown>,
+> = <K extends keyof T & string>(
+  strings: TemplateStringsArray,
+  ...keys: K[]
+) => ErrorCreator<Kind, T, K>
+
+/**
+ * Creates a kind constructor function for a specific error kind.
+ * This is an internal function used by errorSet().
+ *
+ * @param kind - The error kind string
+ * @param _name - The error set name (for debugging)
+ * @returns A tagged template function that creates errors
+ *
+ * @internal
+ */
+export function createKindConstructor<
+  Kind extends string,
+  T extends Record<string, unknown>,
+>(kind: Kind, _name: string): KindConstructor<Kind, T> {
+  return <K extends keyof T & string>(
+    strings: TemplateStringsArray,
+    ...keys: K[]
+  ): ErrorCreator<Kind, T, K> => {
+    return (
+      entity: Pick<T, K>,
+      options?: ErrorOptions
+    ): Err<Kind, Pick<T, K>> => {
+      // Extract only referenced fields into data
+      const data = {} as Record<string, unknown>
+      for (const key of keys) {
+        data[key] = entity[key]
+      }
+
+      // Build message by interpolating values
+      let message = strings[0] ?? ""
+      for (let i = 0; i < keys.length; i++) {
+        const key = keys[i]
+        const value = key !== undefined ? entity[key] : undefined
+        message += String(value ?? "")
+        message += strings[i + 1] ?? ""
+      }
+
+      // Create error object
+      const err: Err<Kind, Pick<T, K>> = {
+        [ERR]: true,
+        kind,
+        message,
+        data: data as Pick<T, K>,
+        ...(options?.cause !== undefined && { cause: options.cause }),
+      }
+
+      return err
+    }
+  }
+}
