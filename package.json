@@ -1,5 +1,5 @@
 {
-  "name": "errorset",
+  "name": "@takinprofit/errorset",
   "version": "0.1.0",
   "description": "Domain-bound, type-safe error handling for TypeScript inspired by Zig's error sets",
   "author": "g5becks",
