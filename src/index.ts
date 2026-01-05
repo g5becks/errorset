@@ -29,5 +29,8 @@ export {
   type KindConstructor,
   type KindFunction,
   type KindGuard,
+  type RecoverHandler,
+  type RecoverHandlers,
+  recover,
   type SetGuard,
 } from "./types.ts"

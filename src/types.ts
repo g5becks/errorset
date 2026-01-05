@@ -354,3 +354,87 @@ export function createSetGuard<
 
   return guard as SetGuard<Kinds, T>
 }
+
+/**
+ * Handler function type for recover.
+ * Receives the error and returns a recovery value.
+ */
+export type RecoverHandler<
+  Kind extends string,
+  T extends Record<string, unknown>,
+  R,
+> = (error: Err<Kind, Partial<T>>) => R
+
+/**
+ * Handlers object for recover method.
+ * Maps error kinds to handler functions, with optional catch-all.
+ */
+export type RecoverHandlers<
+  Kinds extends string,
+  T extends Record<string, unknown>,
+  R,
+> = {
+  [K in Kinds]?: RecoverHandler<K, T, R>
+} & {
+  /** Catch-all handler for any unmatched error kind */
+  _?: RecoverHandler<Kinds, T, R>
+}
+
+/**
+ * Provides expression-style error handling with guaranteed recovery.
+ *
+ * Returns the success value unchanged if not an error.
+ * For errors, applies the matching handler or catch-all.
+ * Throws if no matching handler is found.
+ *
+ * @param value - The result value (success or error)
+ * @param guard - The set-level guard to check errors
+ * @param handlers - Object mapping error kinds to handlers
+ * @returns The success value or handler result
+ *
+ * @example
+ * ```ts
+ * const user = recover(result, UserError, {
+ *   not_found: () => guestUser,
+ *   _: () => defaultUser,  // Catch-all
+ * })
+ * // user is strictly User - no error types possible
+ * ```
+ */
+export function recover<
+  Success,
+  Kinds extends string,
+  T extends Record<string, unknown>,
+  R,
+>(
+  value: Success | Err<Kinds, Partial<T>>,
+  guard: SetGuard<Kinds, T>,
+  handlers: RecoverHandlers<Kinds, T, R>
+): Success | R {
+  // If not an error, return success value unchanged
+  if (!guard(value)) {
+    return value as Success
+  }
+
+  // Value is an error - look for matching handler
+  const error = value as Err<Kinds, Partial<T>>
+  const kind = error.kind as Kinds
+
+  // Try specific handler first
+  const specificHandler = handlers[kind]
+  if (specificHandler !== undefined) {
+    return specificHandler(error as Err<typeof kind, Partial<T>>)
+  }
+
+  // Fall back to catch-all handler
+  const catchAllHandler = handlers._
+  if (catchAllHandler !== undefined) {
+    return catchAllHandler(error)
+  }
+
+  // No handler found - throw
+  throw new Error(
+    `No handler found for error kind: ${kind}. ` +
+      `Provide a handler for "${kind}" or a catch-all "_" handler.`
+  )
+}

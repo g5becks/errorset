@@ -1184,6 +1184,598 @@ import { errorSet, configure, isErr } from "errorset";
 
 ---
 
+## Testing Strategy
+
+### Overview
+
+Achieve 100% test coverage using Bun's built-in test runner. All tests live in the `tests/` directory and use Bun's Jest-compatible API.
+
+### Configuration
+
+**bunfig.toml**:
+```toml
+[test]
+# Coverage
+coverage = true
+coverageReporter = ["text", "lcov"]
+coverageDir = "./coverage"
+coverageThreshold = { lines = 1.0, functions = 1.0, statements = 1.0 }
+coverageSkipTestFiles = true
+
+# Execution
+timeout = 5000
+```
+
+### Test Organization
+
+```
+tests/
+├── unit/
+│   ├── errorset.test.ts       # Core errorSet() function
+│   ├── guards.test.ts          # Set-level and kind-level guards
+│   ├── creation.test.ts        # Error creation with templates
+│   ├── helpers.test.ts         # recover, inspect methods
+│   ├── composition.test.ts     # merge functionality
+│   └── capture.test.ts         # capture for sync/async
+├── integration/
+│   ├── chaining.test.ts        # Error cause chains
+│   ├── type-safety.test.ts     # TypeScript type narrowing
+│   └── real-world.test.ts      # Complete workflows
+└── edge-cases/
+    ├── collisions.test.ts      # Tag name collisions
+    ├── configuration.test.ts   # configure() options
+    └── symbols.test.ts         # Symbol behavior
+```
+
+### Test Categories
+
+#### 1. Core API Tests (`tests/unit/errorset.test.ts`)
+
+Test the `errorSet()` factory function:
+
+```typescript
+import { describe, test, expect } from "bun:test";
+import { errorSet } from "../src/index";
+
+describe("errorSet", () => {
+  test("creates error set with given name and kinds", () => {
+    type User = { id: string; name: string };
+    const UserError = errorSet<User>("UserError", "not_found", "invalid");
+    
+    expect(UserError).toBeDefined();
+    expect(typeof UserError).toBe("function");
+  });
+
+  test("error set is callable as guard", () => {
+    type User = { id: string };
+    const UserError = errorSet<User>("UserError", "not_found");
+    const err = UserError.not_found`User ${"id"} not found`({ id: "123" });
+    
+    expect(UserError(err)).toBe(true);
+    expect(UserError({})).toBe(false);
+    expect(UserError(null)).toBe(false);
+  });
+
+  test("error set has kind constructors", () => {
+    type User = { id: string };
+    const UserError = errorSet<User>("UserError", "not_found", "invalid");
+    
+    expect(typeof UserError.not_found).toBe("function");
+    expect(typeof UserError.invalid).toBe("function");
+  });
+
+  test("error set has helper methods", () => {
+    type User = { id: string };
+    const UserError = errorSet<User>("UserError", "not_found");
+    
+    expect(typeof UserError.recover).toBe("function");
+    expect(typeof UserError.inspect).toBe("function");
+    expect(typeof UserError.merge).toBe("function");
+    expect(typeof UserError.capture).toBe("function");
+  });
+});
+```
+
+#### 2. Error Creation Tests (`tests/unit/creation.test.ts`)
+
+Test template literal error creation:
+
+```typescript
+describe("error creation", () => {
+  test("creates error with ERR symbol", () => {
+    type User = { id: string };
+    const UserError = errorSet<User>("UserError", "not_found");
+    const err = UserError.not_found`User ${"id"} not found`({ id: "123" });
+    
+    expect(err[Symbol.for("err")]).toBe(true);
+  });
+
+  test("extracts fields from template holes", () => {
+    type User = { id: string; name: string; email: string };
+    const UserError = errorSet<User>("UserError", "invalid");
+    const user = { id: "1", name: "John", email: "john@example.com" };
+    
+    const err = UserError.invalid`User ${"name"} (id: ${"id"}) invalid`(user);
+    
+    expect(err.data).toEqual({ name: "John", id: "1" });
+    expect(err.data.email).toBeUndefined();
+  });
+
+  test("formats message with extracted values", () => {
+    type User = { id: string; name: string };
+    const UserError = errorSet<User>("UserError", "not_found");
+    const err = UserError.not_found`User ${"name"} not found`({ id: "1", name: "Alice" });
+    
+    expect(err.message).toBe("User Alice not found");
+  });
+
+  test("handles empty template", () => {
+    type User = { id: string };
+    const UserError = errorSet<User>("UserError", "suspended");
+    const err = UserError.suspended``({ id: "1" });
+    
+    expect(err.message).toBe("");
+    expect(err.data).toEqual({});
+  });
+
+  test("supports cause option", () => {
+    type User = { id: string };
+    const UserError = errorSet<User>("UserError", "not_found");
+    const DbError = errorSet<{ query: string }>("DbError", "timeout");
+    
+    const dbErr = DbError.timeout`Query timed out`({ query: "SELECT *" });
+    const userErr = UserError.not_found`User not found`({ id: "1" }, { cause: dbErr });
+    
+    expect(userErr.cause).toBe(dbErr);
+  });
+});
+```
+
+#### 3. Guard Tests (`tests/unit/guards.test.ts`)
+
+Test both set-level and kind-level guards:
+
+```typescript
+describe("guards", () => {
+  describe("set-level guard (callable)", () => {
+    test("returns true for any error from set", () => {
+      type User = { id: string };
+      const UserError = errorSet<User>("UserError", "not_found", "invalid");
+      
+      const err1 = UserError.not_found`Not found`({ id: "1" });
+      const err2 = UserError.invalid`Invalid`({ id: "2" });
+      
+      expect(UserError(err1)).toBe(true);
+      expect(UserError(err2)).toBe(true);
+    });
+
+    test("returns false for non-errors", () => {
+      type User = { id: string };
+      const UserError = errorSet<User>("UserError", "not_found");
+      
+      expect(UserError(null)).toBe(false);
+      expect(UserError(undefined)).toBe(false);
+      expect(UserError({})).toBe(false);
+      expect(UserError({ kind: "not_found" })).toBe(false);
+    });
+
+    test("returns false for errors from different set", () => {
+      type User = { id: string };
+      const UserError = errorSet<User>("UserError", "not_found");
+      const OrderError = errorSet<{ orderId: string }>("OrderError", "not_found");
+      
+      const orderErr = OrderError.not_found`Order not found`({ orderId: "1" });
+      expect(UserError(orderErr)).toBe(false);
+    });
+  });
+
+  describe("kind-level guard", () => {
+    test("returns true for specific kind", () => {
+      type User = { id: string };
+      const UserError = errorSet<User>("UserError", "not_found", "invalid");
+      
+      const err = UserError.not_found`Not found`({ id: "1" });
+      
+      expect(UserError.not_found(err)).toBe(true);
+      expect(UserError.invalid(err)).toBe(false);
+    });
+
+    test("narrows type to specific kind", () => {
+      type User = { id: string };
+      const UserError = errorSet<User>("UserError", "not_found", "invalid");
+      
+      const result: User | typeof UserError.Type = UserError.not_found`Not found`({ id: "1" });
+      
+      if (UserError.not_found(result)) {
+        expect(result.kind).toBe("not_found");
+      }
+    });
+  });
+
+  describe("instanceof support", () => {
+    test("works with instanceof operator", () => {
+      type User = { id: string };
+      const UserError = errorSet<User>("UserError", "not_found");
+      const err = UserError.not_found`Not found`({ id: "1" });
+      
+      expect(err instanceof UserError).toBe(true);
+    });
+  });
+});
+```
+
+#### 4. Helper Method Tests (`tests/unit/helpers.test.ts`)
+
+Test `recover` and `inspect`:
+
+```typescript
+describe("helper methods", () => {
+  describe("recover", () => {
+    test("returns success value when not error", () => {
+      type User = { id: string; name: string };
+      const UserError = errorSet<User>("UserError", "not_found");
+      const user: User = { id: "1", name: "Alice" };
+      
+      const result = UserError.recover(user, {
+        _: () => ({ id: "0", name: "Guest" }),
+      });
+      
+      expect(result).toBe(user);
+    });
+
+    test("applies catch-all handler for any error", () => {
+      type User = { id: string; name: string };
+      const UserError = errorSet<User>("UserError", "not_found", "invalid");
+      const err = UserError.not_found`Not found`({ id: "1" });
+      
+      const result = UserError.recover(err, {
+        _: () => ({ id: "0", name: "Guest" }),
+      });
+      
+      expect(result).toEqual({ id: "0", name: "Guest" });
+    });
+
+    test("applies specific handler for matching kind", () => {
+      type User = { id: string; name: string };
+      const UserError = errorSet<User>("UserError", "not_found", "invalid");
+      const err = UserError.not_found`Not found`({ id: "1" });
+      
+      const result = UserError.recover(err, {
+        not_found: () => ({ id: "0", name: "Guest" }),
+        invalid: () => ({ id: "-1", name: "Error" }),
+      });
+      
+      expect(result).toEqual({ id: "0", name: "Guest" });
+    });
+
+    test("throws when no matching handler", () => {
+      type User = { id: string };
+      const UserError = errorSet<User>("UserError", "not_found", "invalid");
+      const err = UserError.invalid`Invalid`({ id: "1" });
+      
+      expect(() => {
+        UserError.recover(err, {
+          not_found: () => ({ id: "0" }),
+        } as any);
+      }).toThrow();
+    });
+  });
+
+  describe("inspect", () => {
+    test("does nothing for success value", () => {
+      type User = { id: string };
+      const UserError = errorSet<User>("UserError", "not_found");
+      const user: User = { id: "1" };
+      
+      let called = false;
+      UserError.inspect(user, {
+        not_found: () => { called = true; },
+      });
+      
+      expect(called).toBe(false);
+    });
+
+    test("calls handler for matching kind", () => {
+      type User = { id: string };
+      const UserError = errorSet<User>("UserError", "not_found", "invalid");
+      const err = UserError.not_found`Not found`({ id: "1" });
+      
+      let calledKind: string | null = null;
+      UserError.inspect(err, {
+        not_found: (e) => { calledKind = e.kind; },
+        invalid: () => { calledKind = "wrong"; },
+      });
+      
+      expect(calledKind).toBe("not_found");
+    });
+
+    test("does not call handler for non-matching kind", () => {
+      type User = { id: string };
+      const UserError = errorSet<User>("UserError", "not_found", "invalid");
+      const err = UserError.invalid`Invalid`({ id: "1" });
+      
+      let called = false;
+      UserError.inspect(err, {
+        not_found: () => { called = true; },
+      });
+      
+      expect(called).toBe(false);
+    });
+  });
+});
+```
+
+#### 5. Composition Tests (`tests/unit/composition.test.ts`)
+
+Test `merge`:
+
+```typescript
+describe("merge", () => {
+  test("combines kinds from both sets", () => {
+    type User = { id: string };
+    type Order = { orderId: string };
+    
+    const UserError = errorSet<User>("UserError", "not_found", "invalid");
+    const OrderError = errorSet<Order>("OrderError", "payment_failed");
+    
+    const ServiceError = UserError.merge(OrderError);
+    
+    const userErr = UserError.not_found`User not found`({ id: "1" });
+    const orderErr = OrderError.payment_failed`Payment failed`({ orderId: "1" });
+    
+    expect(ServiceError(userErr)).toBe(true);
+    expect(ServiceError(orderErr)).toBe(true);
+  });
+
+  test("merged set checks any error from either set", () => {
+    const UserError = errorSet<{ id: string }>("UserError", "not_found");
+    const DbError = errorSet<{ query: string }>("DbError", "timeout");
+    
+    const ServiceError = UserError.merge(DbError);
+    
+    const userErr = UserError.not_found`Not found`({ id: "1" });
+    const dbErr = DbError.timeout`Timeout`({ query: "SELECT" });
+    
+    expect(ServiceError(userErr)).toBe(true);
+    expect(ServiceError(dbErr)).toBe(true);
+  });
+
+  test("data becomes untyped in merged set", () => {
+    const UserError = errorSet<{ id: string }>("UserError", "not_found");
+    const OrderError = errorSet<{ orderId: string }>("OrderError", "not_found");
+    
+    const ServiceError = UserError.merge(OrderError);
+    
+    const err = UserError.not_found`Not found`({ id: "1" });
+    
+    if (ServiceError(err)) {
+      // data is Record<string, unknown>
+      expect(typeof err.data).toBe("object");
+    }
+  });
+});
+```
+
+#### 6. Capture Tests (`tests/unit/capture.test.ts`)
+
+Test wrapping throwing code:
+
+```typescript
+describe("capture", () => {
+  test("returns success value when no error thrown", () => {
+    const DbError = errorSet<{ query: string }>("DbError", "query_failed");
+    
+    const result = DbError.capture(
+      () => "success",
+      (e) => DbError.query_failed`Failed`({ query: "" })
+    );
+    
+    expect(result).toBe("success");
+  });
+
+  test("catches thrown error and maps to error set", () => {
+    const DbError = errorSet<{ query: string; message: string }>("DbError", "query_failed");
+    
+    const result = DbError.capture(
+      () => { throw new Error("Connection failed"); },
+      (e) => DbError.query_failed`Query failed: ${"message"}`({ query: "SELECT", message: e.message })
+    );
+    
+    expect(DbError(result)).toBe(true);
+    if (DbError.query_failed(result)) {
+      expect(result.data.message).toBe("Connection failed");
+    }
+  });
+
+  test("handles async functions", async () => {
+    const DbError = errorSet<{ query: string }>("DbError", "timeout");
+    
+    const result = await DbError.capture(
+      async () => { throw new Error("Timeout"); },
+      (e) => DbError.timeout`Timeout`({ query: "SELECT" })
+    );
+    
+    expect(DbError(result)).toBe(true);
+  });
+
+  test("returns promise for async functions", () => {
+    const DbError = errorSet<{ query: string }>("DbError", "timeout");
+    
+    const result = DbError.capture(
+      async () => "success",
+      (e) => DbError.timeout`Timeout`({ query: "" })
+    );
+    
+    expect(result).toBeInstanceOf(Promise);
+  });
+
+  test("converts non-Error throws to Error", () => {
+    const DbError = errorSet<{ message: string }>("DbError", "unknown");
+    
+    const result = DbError.capture(
+      () => { throw "string error"; },
+      (e) => DbError.unknown`Unknown: ${"message"}`({ message: e.message })
+    );
+    
+    expect(DbError(result)).toBe(true);
+  });
+});
+```
+
+#### 7. Integration Tests (`tests/integration/`)
+
+Test complete workflows:
+
+```typescript
+// tests/integration/real-world.test.ts
+describe("real-world workflow", () => {
+  test("repository -> service -> handler flow", () => {
+    type User = { id: string; name: string };
+    const UserError = errorSet<User>("UserError", "not_found");
+    const DbError = errorSet<{ query: string }>("DbError", "timeout");
+    
+    // Repository layer
+    function findUser(id: string): User | UserError | DbError {
+      if (id === "timeout") {
+        return DbError.timeout`Query timed out`({ query: "SELECT" });
+      }
+      if (id === "missing") {
+        return UserError.not_found`User ${"id"} not found`({ id });
+      }
+      return { id, name: "Alice" };
+    }
+    
+    // Service layer
+    const ServiceError = UserError.merge(DbError);
+    function getUser(id: string): User | typeof ServiceError.Type {
+      return findUser(id);
+    }
+    
+    // Handler layer
+    function handleRequest(id: string): { status: number; body: unknown } {
+      const result = getUser(id);
+      
+      if (ServiceError(result)) {
+        if (UserError.not_found(result)) {
+          return { status: 404, body: result.message };
+        }
+        if (DbError.timeout(result)) {
+          return { status: 500, body: "Database error" };
+        }
+      }
+      
+      return { status: 200, body: result };
+    }
+    
+    expect(handleRequest("1")).toEqual({ status: 200, body: { id: "1", name: "Alice" } });
+    expect(handleRequest("missing").status).toBe(404);
+    expect(handleRequest("timeout").status).toBe(500);
+  });
+});
+```
+
+#### 8. Edge Cases (`tests/edge-cases/`)
+
+Test configuration, symbols, and collisions:
+
+```typescript
+// tests/edge-cases/configuration.test.ts
+describe("configuration", () => {
+  test("configure affects error output", () => {
+    configure({ format: "json" });
+    // Test JSON output format
+  });
+
+  test("includeStack adds stack property", () => {
+    configure({ includeStack: true });
+    const UserError = errorSet<{ id: string }>("UserError", "not_found");
+    const err = UserError.not_found`Not found`({ id: "1" });
+    
+    expect(err.stack).toBeDefined();
+  });
+});
+
+// tests/edge-cases/symbols.test.ts
+describe("symbol behavior", () => {
+  test("custom inspect for Node.js", () => {
+    const UserError = errorSet<{ id: string }>("UserError", "not_found");
+    const err = UserError.not_found`Not found`({ id: "123" });
+    
+    const inspectSymbol = Symbol.for("nodejs.util.inspect.custom");
+    expect(typeof err[inspectSymbol]).toBe("function");
+  });
+
+  test("string coercion via toString", () => {
+    const UserError = errorSet<{ id: string }>("UserError", "not_found");
+    expect(String(UserError.not_found)).toBe("not_found");
+  });
+
+  test("string coercion via Symbol.toPrimitive", () => {
+    const UserError = errorSet<{ id: string }>("UserError", "not_found");
+    expect(`${UserError.not_found}`).toBe("not_found");
+  });
+});
+```
+
+### Running Tests
+
+```bash
+# Run all tests
+bun test
+
+# Run with coverage
+bun test --coverage
+
+# Run specific test file
+bun test tests/unit/errorset.test.ts
+
+# Watch mode
+bun test --watch
+
+# Update snapshots (if using)
+bun test --update-snapshots
+```
+
+### Coverage Requirements
+
+- **Lines**: 100%
+- **Functions**: 100%
+- **Statements**: 100%
+- **Branches**: 100%
+
+All code paths must be tested, including:
+- Success paths
+- Error paths
+- Edge cases (null, undefined, empty values)
+- Type narrowing behavior
+- Symbol operations
+- Configuration options
+
+### CI Integration
+
+```yaml
+# .github/workflows/test.yml
+name: Test
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - run: bun test --coverage
+      - name: Check coverage thresholds
+        run: |
+          if ! bun test --coverage 2>&1 | grep -q "100%"; then
+            echo "Coverage below 100%"
+            exit 1
+          fi
+```
+
+---
+
 ## Inspiration
 
 - **Zig**: Error sets as first-class language feature
