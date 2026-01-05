@@ -46,3 +46,31 @@ export type Err<
   /** Optional stack trace (V8 engines only, when enabled) */
   readonly stack?: string
 }
+
+/**
+ * Check if a value is an error from any error set.
+ *
+ * This is a universal type guard that works with errors from any error set.
+ * For checking errors from a specific set, use the set-level guard instead.
+ *
+ * @param value - Value to check
+ * @returns True if value is an error set value
+ *
+ * @example
+ * ```ts
+ * const result = doSomething()
+ * if (isErr(result)) {
+ *   console.log(result.kind, result.message)
+ * }
+ * ```
+ */
+export function isErr(
+  value: unknown
+): value is Err<string, Record<string, unknown>> {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    ERR in value &&
+    (value as Record<typeof ERR, unknown>)[ERR] === true
+  )
+}
