@@ -114,6 +114,25 @@ export type KindConstructor<
 ) => ErrorCreator<Kind, T, K>
 
 /**
+ * Kind-level guard function type.
+ * Checks if a value is a specific error kind.
+ */
+export type KindGuard<
+  Kind extends string,
+  T extends Record<string, unknown>,
+> = (value: unknown) => value is Err<Kind, Partial<T>>
+
+/**
+ * Dual-purpose kind function that acts as both:
+ * 1. Tagged template literal for error creation
+ * 2. Type guard for checking specific error kind
+ */
+export type KindFunction<
+  Kind extends string,
+  T extends Record<string, unknown>,
+> = KindConstructor<Kind, T> & KindGuard<Kind, T>
+
+/**
  * Captures a stack trace on the target object if available (V8 engines only).
  * This is a zero-cost operation in non-V8 environments.
  *
@@ -144,64 +163,108 @@ function captureStack(target: object, constructorOpt?: unknown): void {
 }
 
 /**
- * Creates a kind constructor function for a specific error kind.
- * This is an internal function used by errorSet().
+ * Creates a kind function for a specific error kind.
+ * The returned function serves dual purposes:
+ * 1. As a tagged template literal: creates errors
+ * 2. As a type guard: checks if a value is this specific error kind
  *
  * @param kind - The error kind string
  * @param name - The error set name (for debugging)
- * @returns A tagged template function that creates errors
+ * @returns A dual-purpose kind function
+ *
+ * @example
+ * ```ts
+ * const not_found = createKindFunction<"not_found", User>("not_found", "UserError")
+ *
+ * // As creator (tagged template):
+ * const err = not_found`User ${"id"} not found`({ id: "123" })
+ *
+ * // As guard:
+ * if (not_found(result)) {
+ *   // result is Err<"not_found", Partial<User>>
+ * }
+ * ```
  *
  * @internal
  */
-export function createKindConstructor<
+export function createKindFunction<
   Kind extends string,
   T extends Record<string, unknown>,
->(kind: Kind, name: string): KindConstructor<Kind, T> {
-  return <K extends keyof T & string>(
-    strings: TemplateStringsArray,
+>(kind: Kind, name: string): KindFunction<Kind, T> {
+  // The dual-purpose function
+  const kindFn = <K extends keyof T & string>(
+    stringsOrValue: TemplateStringsArray | unknown,
     ...keys: K[]
-  ): ErrorCreator<Kind, T, K> => {
-    const creator = (
-      entity: Pick<T, K>,
-      options?: ErrorOptions
-    ): Err<Kind, Pick<T, K>> => {
-      // Extract only referenced fields into data
-      const data = {} as Record<string, unknown>
-      for (const key of keys) {
-        data[key] = entity[key]
+  ): ErrorCreator<Kind, T, K> | boolean => {
+    // Check if called as tagged template literal
+    // TemplateStringsArray is an array with a 'raw' property
+    if (
+      Array.isArray(stringsOrValue) &&
+      "raw" in stringsOrValue &&
+      Array.isArray((stringsOrValue as TemplateStringsArray).raw)
+    ) {
+      const strings = stringsOrValue as TemplateStringsArray
+
+      // Return error creator function
+      const creator = (
+        entity: Pick<T, K>,
+        options?: ErrorOptions
+      ): Err<Kind, Pick<T, K>> => {
+        // Extract only referenced fields into data
+        const data = {} as Record<string, unknown>
+        for (const key of keys) {
+          data[key] = entity[key]
+        }
+
+        // Build message by interpolating values
+        let message = strings[0] ?? ""
+        for (let i = 0; i < keys.length; i++) {
+          const key = keys[i]
+          const value = key === undefined ? undefined : entity[key]
+          message += String(value ?? "")
+          message += strings[i + 1] ?? ""
+        }
+
+        // Create error object with custom inspect for debuggers
+        const err = {
+          [ERR]: true,
+          kind,
+          message,
+          data: data as Pick<T, K>,
+          ...(options?.cause !== undefined && { cause: options.cause }),
+          // Custom inspection for Node.js debuggers
+          // Format: ErrorSetName.kind { data }
+          [INSPECT]() {
+            return `${name}.${kind} ${JSON.stringify(data)}`
+          },
+        } as Err<Kind, Pick<T, K>>
+
+        // Capture stack trace if enabled (V8 engines only)
+        captureStack(err, creator)
+
+        return err
       }
 
-      // Build message by interpolating values
-      let message = strings[0] ?? ""
-      for (let i = 0; i < keys.length; i++) {
-        const key = keys[i]
-        const value = key === undefined ? undefined : entity[key]
-        message += String(value ?? "")
-        message += strings[i + 1] ?? ""
-      }
-
-      // Create error object with custom inspect for debuggers
-      const err = {
-        [ERR]: true,
-        kind,
-        message,
-        data: data as Pick<T, K>,
-        ...(options?.cause !== undefined && { cause: options.cause }),
-        // Custom inspection for Node.js debuggers
-        // Format: ErrorSetName.kind { data }
-        [INSPECT]() {
-          return `${name}.${kind} ${JSON.stringify(data)}`
-        },
-      } as Err<Kind, Pick<T, K>>
-
-      // Capture stack trace if enabled (V8 engines only)
-      captureStack(err, creator)
-
-      return err
+      return creator
     }
 
-    return creator
+    // Called as guard - check if value is this specific error kind
+    const value = stringsOrValue
+    if (value === null || typeof value !== "object") {
+      return false
+    }
+
+    if (
+      !(ERR in value) ||
+      (value as Record<typeof ERR, unknown>)[ERR] !== true
+    ) {
+      return false
+    }
+
+    return (value as Record<string, unknown>).kind === kind
   }
+
+  return kindFn as KindFunction<Kind, T>
 }
 
 /**
