@@ -728,6 +728,12 @@ export type ErrorSet<
     fn: () => Promise<Result>,
     mapper: ErrorMapper<Kinds, T>
   ): Promise<Result | Err<Kinds, Partial<T>>>
+
+  /**
+   * Iterator for error kinds.
+   * Allows for...of loops and spread syntax.
+   */
+  [Symbol.iterator](): IterableIterator<Kinds>
 }
 
 /**
@@ -836,6 +842,16 @@ export function errorSet<T extends Record<string, unknown>>(
       fn: () => Promise<Result>,
       mapper: ErrorMapper<string, T>
     ): Promise<Result | Err<string, Partial<T>>> => captureAsync(fn, mapper),
+    writable: false,
+    enumerable: false,
+    configurable: false,
+  })
+
+  // Attach Symbol.iterator for iteration over kinds
+  Object.defineProperty(errorSetObj, Symbol.iterator, {
+    *value(): IterableIterator<string> {
+      yield* kinds
+    },
     writable: false,
     enumerable: false,
     configurable: false,
