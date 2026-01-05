@@ -630,3 +630,40 @@ export function captureSync<
     return mapper(error)
   }
 }
+
+/**
+ * Wraps asynchronous throwing code and converts rejections to error set values.
+ *
+ * Returns the promise result if no error is thrown or rejected.
+ * Catches thrown errors and promise rejections, converts non-Error values
+ * to Error objects, and passes them to the mapper to create an error set value.
+ *
+ * @param fn - Async function that might throw or reject
+ * @param mapper - Function to convert caught Error to error set value
+ * @returns Promise of the function result or mapped error
+ *
+ * @example
+ * ```ts
+ * const result = await captureAsync(
+ *   async () => await db.query(sql),
+ *   (e) => DbError.query_failed`Query failed: ${"message"}`({ sql, message: e.message })
+ * )
+ * // result is QueryResult | DbError
+ * ```
+ */
+export async function captureAsync<
+  T,
+  Kinds extends string,
+  Data extends Record<string, unknown>,
+>(
+  fn: () => Promise<T>,
+  mapper: ErrorMapper<Kinds, Data>
+): Promise<T | Err<Kinds, Partial<Data>>> {
+  try {
+    return await fn()
+  } catch (caught) {
+    // Convert non-Error values to Error objects
+    const error = caught instanceof Error ? caught : new Error(String(caught))
+    return mapper(error)
+  }
+}
