@@ -3,6 +3,8 @@
  * @module types
  */
 
+import { getConfig } from "./config.ts"
+
 /**
  * Unique symbol used to brand error objects.
  * This allows reliable identification of error set values
@@ -112,6 +114,36 @@ export type KindConstructor<
 ) => ErrorCreator<Kind, T, K>
 
 /**
+ * Captures a stack trace on the target object if available (V8 engines only).
+ * This is a zero-cost operation in non-V8 environments.
+ *
+ * @param target - Object to attach stack trace to
+ * @param constructorOpt - Function to exclude from stack trace
+ * @internal
+ */
+function captureStack(target: object, constructorOpt?: unknown): void {
+  const config = getConfig()
+  if (!config.includeStack) {
+    return
+  }
+
+  // Check if Error.captureStackTrace is available (V8 engines: Node.js, Chrome, Bun)
+  if (typeof Error.captureStackTrace === "function") {
+    // Save and set stack trace limit
+    const originalLimit = Error.stackTraceLimit
+    Error.stackTraceLimit = config.stackDepth
+
+    Error.captureStackTrace(
+      target,
+      constructorOpt as ((...args: unknown[]) => unknown) | undefined
+    )
+
+    // Restore original limit
+    Error.stackTraceLimit = originalLimit
+  }
+}
+
+/**
  * Creates a kind constructor function for a specific error kind.
  * This is an internal function used by errorSet().
  *
@@ -129,7 +161,7 @@ export function createKindConstructor<
     strings: TemplateStringsArray,
     ...keys: K[]
   ): ErrorCreator<Kind, T, K> => {
-    return (
+    const creator = (
       entity: Pick<T, K>,
       options?: ErrorOptions
     ): Err<Kind, Pick<T, K>> => {
@@ -162,7 +194,12 @@ export function createKindConstructor<
         },
       } as Err<Kind, Pick<T, K>>
 
+      // Capture stack trace if enabled (V8 engines only)
+      captureStack(err, creator)
+
       return err
     }
+
+    return creator
   }
 }
