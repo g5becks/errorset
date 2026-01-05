@@ -49,6 +49,7 @@
     "@types/bun": "latest",
     "@typescript/native-preview": "^7.0.0-dev.20260105.1",
     "lefthook": "^2.0.13",
+    "tsd": "^0.33.0",
     "ultracite": "7.0.8"
   },
   "peerDependencies": {
@@ -59,9 +60,17 @@
     "build": "bun build ./src/index.ts --outdir ./dist --target node && bun run build:types",
     "build:types": "bunx tsc -p tsconfig.build.json",
     "test": "bun test",
+    "test:types": "bun run build && tsd",
     "lint": "bunx ultracite check --type-aware",
     "lint:fix": "bunx ultracite fix --type-aware",
     "typecheck": "bunx tsgo --noEmit",
-    "prepublishOnly": "bun run build && bun run test && bun run typecheck"
+    "prepublishOnly": "bun run build && bun run test && bun run test:types && bun run typecheck"
+  },
+  "tsd": {
+    "directory": "test-d",
+    "compilerOptions": {
+      "strict": true,
+      "esModuleInterop": true
+    }
   }
 }

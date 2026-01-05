@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./logo.png" alt="errorset logo" width="300" />
+  <img src="./logo.png" alt="errorset logo" width="500" />
 </p>
 
 # errorset
