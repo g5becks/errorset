@@ -667,3 +667,179 @@ export async function captureAsync<
     return mapper(error)
   }
 }
+
+/**
+ * Complete error set type with all functionality.
+ *
+ * Combines:
+ * - Callable set-level guard (can call as function or use instanceof)
+ * - Kind constructors indexed by kind name
+ * - Helper methods: recover, inspect, merge, capture, captureAsync
+ * - Type helper for type exports
+ */
+export type ErrorSet<
+  Kinds extends string,
+  T extends Record<string, unknown>,
+> = SetGuardWithKinds<Kinds, T> & {
+  /** Kind constructors indexed by kind name */
+  [K in Kinds]: KindFunction<K, T>
+} & {
+  /**
+   * Type helper for exporting error set type.
+   * Use: export type MyError = typeof MyError.Type
+   */
+  readonly Type: Err<Kinds, Partial<T>>
+
+  /**
+   * Expression-style error handling with guaranteed recovery.
+   */
+  recover<Success, R>(
+    value: Success | Err<Kinds, Partial<T>>,
+    handlers: RecoverHandlers<Kinds, T, R>
+  ): Success | R
+
+  /**
+   * Observe errors without changing type or control flow.
+   */
+  inspect<Success>(
+    value: Success | Err<Kinds, Partial<T>>,
+    handlers: InspectHandlers<Kinds, T>
+  ): void
+
+  /**
+   * Merge with another error set to create unified guard.
+   */
+  merge<Kinds2 extends string, T2 extends Record<string, unknown>>(
+    other: SetGuardWithKinds<Kinds2, T2>
+  ): SetGuardWithKinds<Kinds | Kinds2, Record<string, unknown>>
+
+  /**
+   * Wrap synchronous throwing code.
+   */
+  capture<Result>(
+    fn: () => Result,
+    mapper: ErrorMapper<Kinds, T>
+  ): Result | Err<Kinds, Partial<T>>
+
+  /**
+   * Wrap asynchronous throwing code.
+   */
+  captureAsync<Result>(
+    fn: () => Promise<Result>,
+    mapper: ErrorMapper<Kinds, T>
+  ): Promise<Result | Err<Kinds, Partial<T>>>
+}
+
+/**
+ * Creates a domain-bound error set.
+ *
+ * Error sets are tied to entity types - template literal holes are constrained
+ * to valid field names from the entity type. Context is automatically extracted.
+ *
+ * @param name - Name of the error set (for debugging, e.g., "UserError")
+ * @param kinds - Error kind strings (e.g., "not_found", "suspended")
+ * @returns Complete error set with guards, constructors, and helper methods
+ *
+ * @example
+ * ```ts
+ * type User = { name: string; id: string }
+ *
+ * const UserError = errorSet<User>("UserError", "not_found", "suspended", "invalid")
+ *
+ * // Create errors with type-safe template literals
+ * const err = UserError.not_found`User ${"id"} not found`({ id: "123" })
+ *
+ * // Check errors with guards
+ * if (UserError(result)) { ... }           // Set-level guard
+ * if (UserError.not_found(result)) { ... } // Kind-level guard
+ * if (result instanceof UserError) { ... } // instanceof support
+ *
+ * // Export type with same name
+ * export type UserError = typeof UserError.Type
+ * ```
+ */
+export function errorSet<T extends Record<string, unknown>>(
+  name: string,
+  ...kinds: string[]
+): ErrorSet<string, T> {
+  // Create the base guard with kinds array
+  const guard = createSetGuardWithKinds<string, T>(kinds)
+
+  // Create kind functions and attach to guard
+  const errorSetObj = guard as unknown as ErrorSet<string, T>
+
+  for (const kind of kinds) {
+    const kindFn = createKindFunction<string, T>(kind, name)
+    Object.defineProperty(errorSetObj, kind, {
+      value: kindFn,
+      writable: false,
+      enumerable: true,
+      configurable: false,
+    })
+  }
+
+  // Attach Type helper (returns undefined but provides type inference)
+  Object.defineProperty(errorSetObj, "Type", {
+    value: undefined,
+    writable: false,
+    enumerable: false,
+    configurable: false,
+  })
+
+  // Attach recover method bound to this guard
+  Object.defineProperty(errorSetObj, "recover", {
+    value: <Success, R>(
+      value: Success | Err<string, Partial<T>>,
+      handlers: RecoverHandlers<string, T, R>
+    ): Success | R => recover(value, guard, handlers),
+    writable: false,
+    enumerable: false,
+    configurable: false,
+  })
+
+  // Attach inspect method bound to this guard
+  Object.defineProperty(errorSetObj, "inspect", {
+    value: <Success>(
+      value: Success | Err<string, Partial<T>>,
+      handlers: InspectHandlers<string, T>
+    ): void => inspect(value, guard, handlers),
+    writable: false,
+    enumerable: false,
+    configurable: false,
+  })
+
+  // Attach merge method
+  Object.defineProperty(errorSetObj, "merge", {
+    value: <Kinds2 extends string, T2 extends Record<string, unknown>>(
+      other: SetGuardWithKinds<Kinds2, T2>
+    ): SetGuardWithKinds<string | Kinds2, Record<string, unknown>> =>
+      merge(guard as SetGuardWithKinds<string, T>, other),
+    writable: false,
+    enumerable: false,
+    configurable: false,
+  })
+
+  // Attach capture method
+  Object.defineProperty(errorSetObj, "capture", {
+    value: <Result>(
+      fn: () => Result,
+      mapper: ErrorMapper<string, T>
+    ): Result | Err<string, Partial<T>> => captureSync(fn, mapper),
+    writable: false,
+    enumerable: false,
+    configurable: false,
+  })
+
+  // Attach captureAsync method
+  Object.defineProperty(errorSetObj, "captureAsync", {
+    value: <Result>(
+      fn: () => Promise<Result>,
+      mapper: ErrorMapper<string, T>
+    ): Promise<Result | Err<string, Partial<T>>> => captureAsync(fn, mapper),
+    writable: false,
+    enumerable: false,
+    configurable: false,
+  })
+
+  return errorSetObj
+}

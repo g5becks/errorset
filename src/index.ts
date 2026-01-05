@@ -29,6 +29,8 @@ export {
   type ErrorCreator,
   type ErrorMapper,
   type ErrorOptions,
+  type ErrorSet,
+  errorSet,
   type InspectHandler,
   type InspectHandlers,
   inspect,
