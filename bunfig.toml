@@ -1,0 +1,13 @@
+[test]
+# Coverage configuration
+coverage = true
+coverageReporter = ["text", "lcov"]
+coverageDir = "./coverage"
+coverageSkipTestFiles = true
+
+# 100% coverage thresholds as required
+[test.coverageThreshold]
+lines = 1.0
+functions = 1.0
+statements = 1.0
+branches = 1.0
