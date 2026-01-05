@@ -19,12 +19,14 @@ export {
 } from "./config.ts"
 // Core types and constants
 export {
+  captureSync,
   createKindFunction,
   createSetGuard,
   createSetGuardWithKinds,
   ERR,
   type Err,
   type ErrorCreator,
+  type ErrorMapper,
   type ErrorOptions,
   type InspectHandler,
   type InspectHandlers,

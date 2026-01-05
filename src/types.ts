@@ -584,3 +584,49 @@ export function merge<
     combinedKinds
   )
 }
+
+/**
+ * Error mapper function type for capture.
+ * Receives the caught Error and returns an error set value.
+ */
+export type ErrorMapper<
+  Kinds extends string,
+  T extends Record<string, unknown>,
+> = (error: Error) => Err<Kinds, Partial<T>>
+
+/**
+ * Wraps synchronous throwing code and converts exceptions to error set values.
+ *
+ * Returns the function result if no error is thrown.
+ * Catches thrown errors, converts non-Error values to Error objects,
+ * and passes them to the mapper to create an error set value.
+ *
+ * @param fn - Synchronous function that might throw
+ * @param mapper - Function to convert caught Error to error set value
+ * @returns The function result or mapped error
+ *
+ * @example
+ * ```ts
+ * const result = captureSync(
+ *   () => db.querySync(sql),
+ *   (e) => DbError.query_failed`Query failed: ${"message"}`({ sql, message: e.message })
+ * )
+ * // result is QueryResult | DbError
+ * ```
+ */
+export function captureSync<
+  T,
+  Kinds extends string,
+  Data extends Record<string, unknown>,
+>(
+  fn: () => T,
+  mapper: ErrorMapper<Kinds, Data>
+): T | Err<Kinds, Partial<Data>> {
+  try {
+    return fn()
+  } catch (caught) {
+    // Convert non-Error values to Error objects
+    const error = caught instanceof Error ? caught : new Error(String(caught))
+    return mapper(error)
+  }
+}
