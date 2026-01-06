@@ -1,0 +1,700 @@
+# errorset - Domain-bound, Type-safe Error Handling for TypeScript
+
+> This document provides comprehensive API documentation for AI agents working with the @takinprofit/errorset library.
+
+## Overview
+
+errorset is a TypeScript library for handling expected failures as values rather than exceptions. It is inspired by Zig's error sets and provides:
+
+- Domain-bound errors tied to entity types
+- Type-safe template literals for error creation
+- Automatic context extraction from referenced fields
+- Native control flow with type guards
+- Zero wrapper types (no Result<T,E> monads)
+
+## Installation
+
+```bash
+bun add @takinprofit/errorset
+npm install @takinprofit/errorset
+```
+
+Requires TypeScript 5+.
+
+---
+
+## Core Concepts
+
+### Error Sets
+
+An error set defines a collection of related error kinds bound to a domain entity type. Errors are plain objects with:
+
+- `kind`: String literal identifying the error type
+- `message`: Human-readable error message
+- `data`: Extracted context from the domain entity
+- `cause`: Optional wrapped error (for error chaining)
+- `stack`: Optional stack trace (when enabled)
+
+### Builder Pattern API
+
+Error sets use a builder pattern for proper TypeScript type inference:
+
+```typescript
+const ErrorSet = errorSet(name, kinds).init<EntityType>(config?)
+```
+
+The `as const` assertion on the kinds array is **required** to preserve literal types.
+
+---
+
+## API Reference
+
+### errorSet(name, kinds)
+
+Creates an error set builder. Must be followed by `.init<T>()` to complete.
+
+**Signature:**
+```typescript
+function errorSet<N extends string, const Kinds extends readonly string[]>(
+  name: N,
+  kinds: Kinds
+): ErrorSetBuilder<Kinds>
+```
+
+**Parameters:**
+- `name`: String identifier for the error set (used in debugging output)
+- `kinds`: Readonly array of error kind strings (use `as const`)
+
+**Returns:** `ErrorSetBuilder<Kinds>` with `.init<T>()` method
+
+**Example:**
+```typescript
+import { errorSet } from "@takinprofit/errorset";
+
+type User = { id: string; name: string; email: string };
+
+const UserError = errorSet("UserError", ["not_found", "suspended", "invalid"] as const)
+  .init<User>();
+```
+
+---
+
+### .init<T>(config?)
+
+Completes error set creation by binding the entity type.
+
+**Signature:**
+```typescript
+init<T extends Record<string, unknown>>(config?: ErrorSetConfig): ErrorSet<Kinds[number], T>
+```
+
+**Parameters:**
+- `T`: The domain entity type (e.g., User, Order)
+- `config`: Optional per-instance configuration
+
+**Config Options:**
+```typescript
+type ErrorSetConfig = {
+  format?: "pretty" | "json" | "minimal";
+  includeStack?: boolean;
+  includeTimestamp?: boolean;
+  colors?: boolean;
+  stackDepth?: number;
+}
+```
+
+**Example:**
+```typescript
+// Basic usage
+const UserError = errorSet("UserError", ["not_found"] as const).init<User>();
+
+// With config
+const VerboseError = errorSet("VerboseError", ["error"] as const)
+  .init<User>({
+    includeStack: true,
+    format: "pretty"
+  });
+```
+
+---
+
+### Creating Errors with Template Literals
+
+Each error kind becomes a tagged template literal function on the error set.
+
+**Signature:**
+```typescript
+ErrorSet.kind`message with ${"field"} interpolation`(entity, options?)
+```
+
+**Parameters:**
+- Template string with `${"fieldName"}` placeholders
+- `entity`: Object containing values for referenced fields (must include all referenced fields)
+- `options`: Optional `{ cause?: Err }` for error chaining
+
+**Template Holes:**
+- Must be string literals matching `keyof T`
+- Only referenced fields are extracted into `err.data`
+- TypeScript enforces valid field names at compile time
+
+**Returns:** `Err<Kind, Pick<T, ReferencedFields>>`
+
+**Example:**
+```typescript
+type User = { id: string; name: string; email: string };
+
+const UserError = errorSet("UserError", ["not_found", "suspended"] as const)
+  .init<User>();
+
+// Create error - only 'id' is extracted to data
+const err1 = UserError.not_found`User ${"id"} not found`({ id: "123" });
+// err1.kind === "not_found"
+// err1.message === "User 123 not found"
+// err1.data === { id: "123" }
+
+// Multiple fields
+const err2 = UserError.suspended`User ${"id"} (${"name"}) is suspended`({
+  id: "123",
+  name: "John"
+});
+// err2.data === { id: "123", name: "John" }
+
+// With cause (error chaining)
+const cause = UserError.not_found`User ${"id"} not found`({ id: "456" });
+const err3 = UserError.suspended`Account ${"id"} suspended`(
+  { id: "123" },
+  { cause }
+);
+// err3.cause === cause
+```
+
+---
+
+### Type Guards
+
+#### Set-Level Guard: ErrorSet(value)
+
+Checks if value is any error from this set.
+
+**Signature:**
+```typescript
+ErrorSet(value: unknown): value is Err<Kinds, Partial<T>>
+```
+
+**Example:**
+```typescript
+const result = getUser("123");
+
+if (UserError(result)) {
+  // result is UserError (not_found | suspended | invalid)
+  console.log(result.kind);    // "not_found" | "suspended" | "invalid"
+  console.log(result.message); // string
+  console.log(result.data);    // Partial<User>
+  return;
+}
+
+// result is User here
+console.log(result.name);
+```
+
+#### instanceof Support
+
+Error sets support `instanceof` via `Symbol.hasInstance`:
+
+```typescript
+if (result instanceof UserError) {
+  // Equivalent to UserError(result)
+}
+```
+
+#### Kind-Level Guard: ErrorSet.kind(value)
+
+Checks if value is a specific error kind.
+
+**Signature:**
+```typescript
+ErrorSet.kind(value: unknown): value is Err<Kind, Partial<T>>
+```
+
+**Example:**
+```typescript
+if (UserError.not_found(result)) {
+  // result.kind is specifically "not_found"
+  console.log(result.data.id);
+}
+
+if (UserError.suspended(result)) {
+  // result.kind is specifically "suspended"
+}
+```
+
+#### Universal Guard: isErr(value)
+
+Checks if any value is any error from any error set.
+
+**Signature:**
+```typescript
+function isErr(value: unknown): value is Err<string, Record<string, unknown>>
+```
+
+**Example:**
+```typescript
+import { isErr } from "@takinprofit/errorset";
+
+if (isErr(result)) {
+  console.log(result.kind, result.message);
+}
+```
+
+---
+
+### ErrorSet.recover(value, handlers)
+
+Expression-style error handling with guaranteed recovery.
+
+**Signature:**
+```typescript
+recover<Success, R>(
+  value: Success | Err<Kinds, Partial<T>>,
+  handlers: {
+    [K in Kinds]?: (error: Err<K, Partial<T>>) => R;
+    _?: (error: Err<Kinds, Partial<T>>) => R;  // Catch-all
+  }
+): Success | R
+```
+
+**Behavior:**
+- Returns success value unchanged if not an error
+- Applies matching handler for error kind
+- Falls back to `_` catch-all handler if no specific match
+- Throws if no matching handler found
+
+**Example:**
+```typescript
+const user = UserError.recover(result, {
+  not_found: () => guestUser,
+  suspended: (e) => ({ ...guestUser, reason: e.message }),
+  invalid: () => guestUser,
+});
+// user is strictly User - no error types possible
+
+// With catch-all
+const user = UserError.recover(result, {
+  not_found: () => guestUser,
+  _: () => defaultUser,  // Handles suspended, invalid
+});
+```
+
+---
+
+### ErrorSet.inspect(value, handlers)
+
+Observe errors for side effects without changing control flow.
+
+**Signature:**
+```typescript
+inspect<Success>(
+  value: Success | Err<Kinds, Partial<T>>,
+  handlers: {
+    [K in Kinds]?: (error: Err<K, Partial<T>>) => void;
+  }
+): void
+```
+
+**Behavior:**
+- Does nothing if value is not an error
+- Calls matching handler if provided
+- Does not modify the result value
+- Returns void
+
+**Example:**
+```typescript
+UserError.inspect(result, {
+  suspended: (e) => audit.log(`Blocked user: ${e.data.id}`),
+  not_found: (e) => metrics.increment("user.not_found"),
+});
+
+// result type unchanged - continue with normal flow
+if (UserError(result)) return result;
+```
+
+---
+
+### ErrorSet.merge(other)
+
+Combines two error sets into a unified guard.
+
+**Signature:**
+```typescript
+merge<Kinds2 extends string, T2 extends Record<string, unknown>>(
+  other: SetGuardWithKinds<Kinds2, T2>
+): SetGuardWithKinds<Kinds | Kinds2, Record<string, unknown>>
+```
+
+**Behavior:**
+- Creates new guard checking errors from either set
+- Merged guard loses specific data typing (becomes `Record<string, unknown>`)
+- Original sets remain unchanged
+
+**Example:**
+```typescript
+const UserError = errorSet("UserError", ["not_found", "suspended"] as const)
+  .init<User>();
+const DbError = errorSet("DbError", ["timeout", "connection"] as const)
+  .init<DbContext>();
+
+const ServiceError = UserError.merge(DbError);
+
+if (ServiceError(result)) {
+  // result.kind is "not_found" | "suspended" | "timeout" | "connection"
+  
+  // For type-safe data access, use original guards:
+  if (UserError(result)) {
+    console.log(result.data.name);  // Type-safe User fields
+  }
+}
+```
+
+---
+
+### ErrorSet.capture(fn, mapper)
+
+Wraps synchronous throwing code, converting exceptions to error values.
+
+**Signature:**
+```typescript
+capture<Result>(
+  fn: () => Result,
+  mapper: (error: Error) => Err<Kinds, Partial<T>>
+): Result | Err<Kinds, Partial<T>>
+```
+
+**Behavior:**
+- Returns function result if no error thrown
+- Catches thrown errors (converts non-Error values to Error)
+- Passes Error to mapper function to create error set value
+
+**Example:**
+```typescript
+type DbContext = { query: string; message: string };
+const DbError = errorSet("DbError", ["query_failed"] as const).init<DbContext>();
+
+const result = DbError.capture(
+  () => db.querySync(sql),
+  (e) => DbError.query_failed`Query failed: ${"message"}`({
+    message: e.message
+  })
+);
+
+if (DbError(result)) {
+  console.log(result.kind);     // "query_failed"
+  console.log(result.message);  // "Query failed: Connection refused"
+}
+```
+
+---
+
+### ErrorSet.captureAsync(fn, mapper)
+
+Wraps asynchronous throwing code, converting rejections to error values.
+
+**Signature:**
+```typescript
+captureAsync<Result>(
+  fn: () => Promise<Result>,
+  mapper: (error: Error) => Err<Kinds, Partial<T>>
+): Promise<Result | Err<Kinds, Partial<T>>>
+```
+
+**Example:**
+```typescript
+const result = await DbError.captureAsync(
+  async () => await db.query(sql),
+  (e) => DbError.query_failed`Query failed: ${"message"}`({
+    message: e.message
+  })
+);
+```
+
+---
+
+### ErrorSet.kinds
+
+Readonly array of error kind strings.
+
+**Type:** `readonly Kinds[]`
+
+**Example:**
+```typescript
+const UserError = errorSet("UserError", ["not_found", "suspended"] as const)
+  .init<User>();
+
+console.log(UserError.kinds);  // ["not_found", "suspended"]
+```
+
+---
+
+### ErrorSet.Type
+
+Type helper for exporting error set types.
+
+**Usage:**
+```typescript
+const UserError = errorSet("UserError", ["not_found", "suspended"] as const)
+  .init<User>();
+
+// Export type with same name as value
+export type UserError = typeof UserError.Type;
+
+// Now UserError works in both type and value positions:
+function getUser(id: string): User | UserError { ... }
+if (UserError(result)) { ... }
+```
+
+---
+
+### Iteration Support
+
+Error sets are iterable over their kind strings.
+
+**Example:**
+```typescript
+// Spread syntax
+const kinds = [...UserError];  // ["not_found", "suspended", "invalid"]
+
+// for...of loop
+for (const kind of UserError) {
+  console.log(kind);
+}
+
+// Array.from
+const kindArray = Array.from(UserError);
+```
+
+---
+
+### String Coercion
+
+Kind functions support string coercion.
+
+**Example:**
+```typescript
+console.log(String(UserError.not_found));  // "not_found"
+console.log(`Error type: ${UserError.not_found}`);  // "Error type: not_found"
+```
+
+---
+
+### configure(options)
+
+Sets global configuration for all error sets.
+
+**Signature:**
+```typescript
+function configure(options: Partial<Config>): void
+```
+
+**Options:**
+```typescript
+type Config = {
+  format: "pretty" | "json" | "minimal";  // Default: "pretty"
+  includeStack: boolean;                   // Default: false
+  includeTimestamp: boolean;               // Default: false
+  colors: boolean;                         // Default: true
+  stackDepth: number;                      // Default: 10
+}
+```
+
+**Example:**
+```typescript
+import { configure } from "@takinprofit/errorset";
+
+// Development config
+configure({
+  format: "pretty",
+  colors: true,
+  includeStack: true
+});
+
+// Production config
+configure({
+  format: "json",
+  includeTimestamp: true
+});
+```
+
+---
+
+### getConfig()
+
+Returns the current global configuration.
+
+**Signature:**
+```typescript
+function getConfig(): Config
+```
+
+---
+
+### resetConfig()
+
+Resets global configuration to defaults.
+
+**Signature:**
+```typescript
+function resetConfig(): void
+```
+
+---
+
+## Err Type Structure
+
+The error object structure:
+
+```typescript
+type Err<Kind extends string, Data extends Record<string, unknown>> = {
+  readonly [ERR]: true;           // Brand symbol for identification
+  readonly kind: Kind;            // Error kind literal
+  readonly message: string;       // Human-readable message
+  readonly data: Data;            // Extracted context fields
+  readonly cause?: Err;           // Optional wrapped error
+  readonly timestamp?: number;    // Optional timestamp (when enabled)
+  readonly stack?: string;        // Optional stack trace (when enabled)
+}
+```
+
+---
+
+## Common Patterns
+
+### Function Return Types
+
+```typescript
+type User = { id: string; name: string };
+
+const UserError = errorSet("UserError", ["not_found", "suspended"] as const)
+  .init<User>();
+export type UserError = typeof UserError.Type;
+
+// Return type is union of success and error
+function getUser(id: string): User | UserError {
+  const user = db.get(id);
+  if (!user) {
+    return UserError.not_found`User ${"id"} not found`({ id });
+  }
+  return user;
+}
+```
+
+### Error Propagation
+
+```typescript
+function processCheckout(id: string): Receipt | UserError | OrderError {
+  const user = getUser(id);
+  if (UserError(user)) return user;  // Propagate
+
+  const order = getOrder(user.id);
+  if (OrderError(order)) return order;  // Propagate
+
+  return createReceipt(user, order);
+}
+```
+
+### Exhaustive Handling with switch
+
+```typescript
+if (UserError(result)) {
+  switch (result.kind) {
+    case "not_found":
+      return { status: 404, body: result.message };
+    case "suspended":
+      return { status: 403, body: "Account suspended" };
+    case "invalid":
+      return { status: 400, body: result.message };
+  }
+}
+```
+
+### Layered Error Handling
+
+```typescript
+// Check specific kinds first
+if (UserError.not_found(result)) {
+  return { status: 404 };
+}
+
+if (UserError.suspended(result)) {
+  return { status: 403 };
+}
+
+// Propagate any remaining errors
+if (UserError(result)) {
+  return result;
+}
+
+// Success case
+return { status: 200, data: result };
+```
+
+---
+
+## Best Practices
+
+1. **Always use `as const`** on the kinds array for literal type inference
+2. **Export both value and type** using the `typeof ErrorSet.Type` pattern
+3. **Use error sets for expected failures** (user not found, validation failed)
+4. **Use `throw` for unexpected failures** (null pointers, assertion failures)
+5. **Reference only needed fields** in template literals to minimize `data` size
+6. **Use kind-level guards** when you need to handle specific error types
+7. **Use `recover`** when you need a guaranteed non-error value
+8. **Use `inspect`** for logging/metrics without changing control flow
+9. **Use `capture`/`captureAsync`** to bridge throwing code at boundaries
+
+---
+
+## Exports Summary
+
+```typescript
+// Main factory
+export { errorSet } from "@takinprofit/errorset";
+
+// Configuration
+export { configure, getConfig, resetConfig, type Config } from "@takinprofit/errorset";
+
+// Type guards
+export { isErr } from "@takinprofit/errorset";
+
+// Types
+export type {
+  Err,
+  ErrorSet,
+  ErrorSetBuilder,
+  ErrorSetConfig,
+  ErrorOptions,
+  KindFunction,
+  KindConstructor,
+  KindGuard,
+  SetGuard,
+  SetGuardWithKinds,
+  ErrorMapper,
+  RecoverHandler,
+  RecoverHandlers,
+  InspectHandler,
+  InspectHandlers,
+} from "@takinprofit/errorset";
+
+// Symbols
+export { ERR } from "@takinprofit/errorset";
+
+// Standalone functions (also available as methods)
+export {
+  recover,
+  inspect,
+  merge,
+  captureSync,
+  captureAsync,
+  createKindFunction,
+  createSetGuard,
+  createSetGuardWithKinds,
+} from "@takinprofit/errorset";
+```

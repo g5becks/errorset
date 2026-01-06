@@ -1,9 +1,10 @@
 ---
 id: task-035
 title: Add JSDoc documentation to public APIs
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-01-05 15:42'
+updated_date: '2026-01-06 19:20'
 labels:
   - documentation
 dependencies: []
@@ -27,3 +28,9 @@ Add comprehensive JSDoc comments to all exported functions, types, and methods f
 - [ ] #7 bun run typecheck passes with no errors
 - [ ] #8 bun run lint:fix passes with no errors
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+All public APIs have comprehensive JSDoc in src/types.ts including errorSet, isErr, configure, Err type, and all helper methods with examples. Documentation is accurate and helpful.
+<!-- SECTION:NOTES:END -->

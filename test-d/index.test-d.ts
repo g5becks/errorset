@@ -8,7 +8,7 @@ import {
   type Config,
   configure,
   type Err,
-  type ErrorSetOptions,
+  type ErrorSetConfig,
   errorSet,
   isErr,
   type KindFunction,
@@ -31,15 +31,14 @@ type Order = {
 }
 
 // =============================================================================
-// errorSet creation - positional API
+// errorSet creation - builder API
 // =============================================================================
 
-const UserError = errorSet<User>(
-  "UserError",
+const UserError = errorSet("UserError", [
   "not_found",
   "suspended",
-  "invalid"
-)
+  "invalid",
+] as const).init<User>()
 
 // The error set should be callable (set-level guard)
 expectType<boolean>(UserError({} as unknown))
@@ -60,26 +59,23 @@ expectAssignable<Function>(UserError.capture)
 expectAssignable<Function>(UserError.captureAsync)
 
 // =============================================================================
-// errorSet creation - object API
+// errorSet creation - builder API with config
 // =============================================================================
 
-const OrderError = errorSet<Order>({
-  name: "OrderError",
-  kinds: ["cancelled", "payment_failed", "out_of_stock"],
-})
+const OrderError = errorSet("OrderError", [
+  "cancelled",
+  "payment_failed",
+  "out_of_stock",
+] as const).init<Order>()
 
-// Object API should produce same shape
+// Should produce same shape
 expectType<boolean>(OrderError({} as unknown))
 expectAssignable<readonly string[]>(OrderError.kinds)
 
-// Object API with config
-const VerboseError = errorSet<User>({
-  name: "VerboseError",
-  kinds: ["error"],
-  config: {
-    includeStack: true,
-    format: "pretty",
-  },
+// Builder API with config
+const VerboseError = errorSet("VerboseError", ["error"] as const).init<User>({
+  includeStack: true,
+  format: "pretty",
 })
 
 expectType<boolean>(VerboseError({} as unknown))
@@ -88,22 +84,19 @@ expectType<boolean>(VerboseError({} as unknown))
 // Kind function access and error creation
 // =============================================================================
 
-// Access kind function (dynamic key)
-// biome-ignore lint/complexity/useLiteralKeys: Testing dynamic key access
-const notFoundFn = UserError["not_found"]
-expectAssignable<KindFunction<string, User> | undefined>(notFoundFn)
+// Access kind function directly (static property)
+const notFoundFn = UserError.not_found
+expectAssignable<KindFunction<"not_found", User>>(notFoundFn)
 
 // Create error using kind function
-if (notFoundFn) {
-  const user: User = { id: "123", name: "John", email: "john@example.com" }
+const user: User = { id: "123", name: "John", email: "john@example.com" }
 
-  // Template literal creates an error
-  const err = notFoundFn`User ${"id"} not found`(user)
-  expectAssignable<Err<string, Record<string, unknown>>>(err)
-  expectType<string>(err.kind)
-  expectType<string>(err.message)
-  expectAssignable<Record<string, unknown>>(err.data)
-}
+// Template literal creates an error
+const err = UserError.not_found`User ${"id"} not found`(user)
+expectAssignable<Err<"not_found", { id: string }>>(err)
+expectType<"not_found">(err.kind)
+expectType<string>(err.message)
+expectAssignable<{ id: string }>(err.data)
 
 // =============================================================================
 // Err type structure
@@ -203,14 +196,7 @@ expectAssignable<readonly string[]>(ServiceError.kinds)
 // Sync capture
 const capturedSync = UserError.capture(
   () => "success" as const,
-  e => {
-    // biome-ignore lint/complexity/useLiteralKeys: Testing dynamic key access
-    const fn = UserError["invalid"]
-    if (fn) {
-      return fn`Error`({} as User)
-    }
-    throw e
-  }
+  () => UserError.invalid`Error`({} as User)
 )
 
 expectAssignable<"success" | Err<string, Partial<User>>>(capturedSync)
@@ -218,45 +204,22 @@ expectAssignable<"success" | Err<string, Partial<User>>>(capturedSync)
 // Async capture
 const capturedAsync = UserError.captureAsync(
   async () => "success" as const,
-  e => {
-    // biome-ignore lint/complexity/useLiteralKeys: Testing dynamic key access
-    const fn = UserError["invalid"]
-    if (fn) {
-      return fn`Error`({} as User)
-    }
-    throw e
-  }
+  () => UserError.invalid`Error`({} as User)
 )
 
 expectAssignable<Promise<"success" | Err<string, Partial<User>>>>(capturedAsync)
 
 // =============================================================================
-// ErrorSetOptions type
+// ErrorSetConfig type
 // =============================================================================
 
-const options: ErrorSetOptions = {
-  name: "TestError",
-  kinds: ["a", "b", "c"],
+const config: ErrorSetConfig = {
+  includeStack: true,
+  format: "json",
+  stackDepth: 10,
 }
 
-expectType<string>(options.name)
-expectType<string[]>(options.kinds)
-expectAssignable<Partial<Config> | undefined>(options.config)
-
-// Config option in ErrorSetOptions
-const optionsWithConfig: ErrorSetOptions = {
-  name: "ConfiguredError",
-  kinds: ["error"],
-  config: {
-    includeStack: true,
-    format: "json",
-    stackDepth: 10,
-  },
-}
-
-if (optionsWithConfig.config) {
-  expectAssignable<Partial<Config>>(optionsWithConfig.config)
-}
+expectAssignable<Partial<Config>>(config)
 
 // =============================================================================
 // configure function

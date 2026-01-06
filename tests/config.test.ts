@@ -102,24 +102,31 @@ describe("Configuration Format Options", () => {
 
 describe("Stack Trace Configuration", () => {
   type User = { id: string }
-  const UserError = errorSet<User>("UserError", "not_found")
-  const not_found = (UserError as Record<string, unknown>).not_found as (
-    s: TemplateStringsArray,
-    ...k: string[]
-  ) => (d: User) => { stack?: string }
 
   afterEach(() => {
     resetConfig()
   })
 
   it("should not include stack by default", () => {
-    const err = not_found`User ${"id"} not found`({ id: "123" })
+    const UserError = errorSet("UserError", ["not_found"] as const).init<User>()
+    const err = UserError.not_found`User ${"id"} not found`({ id: "123" })
     expect(err.stack).toBeUndefined()
   })
 
-  it("should include stack when configured", () => {
+  it("should include stack when configured globally", () => {
     configure({ includeStack: true })
-    const err = not_found`User ${"id"} not found`({ id: "123" })
+    const UserError = errorSet("UserError", ["not_found"] as const).init<User>()
+    const err = UserError.not_found`User ${"id"} not found`({ id: "123" })
+    // Stack should be defined in V8 engines (Bun)
+    expect(err.stack).toBeDefined()
+    expect(typeof err.stack).toBe("string")
+  })
+
+  it("should include stack when configured per-instance", () => {
+    const UserError = errorSet("UserError", ["not_found"] as const).init<User>({
+      includeStack: true,
+    })
+    const err = UserError.not_found`User ${"id"} not found`({ id: "123" })
     // Stack should be defined in V8 engines (Bun)
     expect(err.stack).toBeDefined()
     expect(typeof err.stack).toBe("string")
@@ -127,7 +134,8 @@ describe("Stack Trace Configuration", () => {
 
   it("should respect stackDepth configuration", () => {
     configure({ includeStack: true, stackDepth: 5 })
-    const err = not_found`User ${"id"} not found`({ id: "123" })
+    const UserError = errorSet("UserError", ["not_found"] as const).init<User>()
+    const err = UserError.not_found`User ${"id"} not found`({ id: "123" })
     expect(err.stack).toBeDefined()
     // Stack trace depth is limited
     const lines = (err.stack ?? "").split("\n").filter(Boolean)

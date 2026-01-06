@@ -84,11 +84,44 @@ export function isErr(
 }
 
 /**
+ * Optional configuration for error set initialization.
+ */
+export type ErrorSetConfig = Partial<Config>
+
+/**
  * Options for error creation.
  */
 export type ErrorOptions = {
   /** Optional wrapped error that caused this error */
   cause?: Err<string, Record<string, unknown>>
+}
+
+/**
+ * Builder type returned by errorSet() that allows binding the entity type.
+ *
+ * @typeParam Kinds - Tuple type of error kind strings
+ */
+export type ErrorSetBuilder<Kinds extends readonly string[]> = {
+  /**
+   * Initialize the error set with an entity type.
+   *
+   * @typeParam T - The domain entity type (e.g., User, Order)
+   * @param config - Optional configuration overrides
+   * @returns Complete error set bound to entity type T
+   *
+   * @example
+   * ```ts
+   * const UserError = errorSet("UserError", ["not_found", "suspended"] as const)
+   *   .init<User>()
+   *
+   * // With config
+   * const VerboseError = errorSet("VerboseError", ["error"] as const)
+   *   .init<User>({ includeStack: true })
+   * ```
+   */
+  init<T extends Record<string, unknown>>(
+    config?: ErrorSetConfig
+  ): ErrorSet<Kinds[number], T>
 }
 
 /**
@@ -131,19 +164,6 @@ export type KindFunction<
   Kind extends string,
   T extends Record<string, unknown>,
 > = KindConstructor<Kind, T> & KindGuard<Kind, T>
-
-/**
- * Options for creating an error set with object syntax.
- * Alternative to positional arguments for errorSet().
- */
-export type ErrorSetOptions = {
-  /** Name of the error set (for debugging, e.g., "UserError") */
-  name: string
-  /** Error kinds (e.g., ["not_found", "suspended"]) */
-  kinds: string[]
-  /** Optional per-instance configuration overrides */
-  config?: Partial<Config>
-}
 
 /**
  * Captures a stack trace on the target object if available (V8 engines only).
@@ -762,20 +782,29 @@ export type ErrorSet<
 }
 
 /**
- * Creates a domain-bound error set.
+ * Creates a domain-bound error set builder.
  *
  * Error sets are tied to entity types - template literal holes are constrained
  * to valid field names from the entity type. Context is automatically extracted.
  *
+ * Use the builder pattern: call errorSet() with name and kinds, then .init<T>()
+ * to bind the entity type.
+ *
  * @param name - Name of the error set (for debugging, e.g., "UserError")
- * @param kinds - Error kind strings (e.g., "not_found", "suspended")
- * @returns Complete error set with guards, constructors, and helper methods
+ * @param kinds - Array of error kind strings with `as const` for literal inference
+ * @returns Builder with .init<T>() method to complete the error set
  *
  * @example
  * ```ts
  * type User = { name: string; id: string }
  *
- * const UserError = errorSet<User>("UserError", "not_found", "suspended", "invalid")
+ * // Create error set with builder pattern
+ * const UserError = errorSet("UserError", ["not_found", "suspended", "invalid"] as const)
+ *   .init<User>()
+ *
+ * // With optional config
+ * const VerboseError = errorSet("VerboseError", ["error"] as const)
+ *   .init<User>({ includeStack: true, stackDepth: 5 })
  *
  * // Create errors with type-safe template literals
  * const err = UserError.not_found`User ${"id"} not found`({ id: "123" })
@@ -789,105 +818,105 @@ export type ErrorSet<
  * export type UserError = typeof UserError.Type
  * ```
  */
-export function errorSet<T extends Record<string, unknown>>(
-  nameOrOptions: string | ErrorSetOptions,
-  ...kinds: string[]
-): ErrorSet<string, T> {
-  // Detect which API form is being used
-  const isOptionsObject =
-    typeof nameOrOptions === "object" && nameOrOptions !== null
-  const name = isOptionsObject ? nameOrOptions.name : nameOrOptions
-  const kindsList = isOptionsObject ? nameOrOptions.kinds : kinds
-  const instanceConfig = isOptionsObject ? nameOrOptions.config : undefined
+export function errorSet<
+  N extends string,
+  const Kinds extends readonly string[],
+>(name: N, kinds: Kinds): ErrorSetBuilder<Kinds> {
+  return {
+    init<T extends Record<string, unknown>>(
+      config?: ErrorSetConfig
+    ): ErrorSet<Kinds[number], T> {
+      // Create the base guard with kinds array
+      const guard = createSetGuardWithKinds<Kinds[number], T>(kinds)
 
-  // Create the base guard with kinds array
-  const guard = createSetGuardWithKinds<string, T>(kindsList)
+      // Create kind functions and attach to guard
+      const errorSetObj = guard as unknown as ErrorSet<Kinds[number], T>
 
-  // Create kind functions and attach to guard
-  const errorSetObj = guard as unknown as ErrorSet<string, T>
+      for (const kind of kinds) {
+        const kindFn = createKindFunction<string, T>(kind, name, config)
+        Object.defineProperty(errorSetObj, kind, {
+          value: kindFn,
+          writable: false,
+          enumerable: true,
+          configurable: false,
+        })
+      }
 
-  for (const kind of kindsList) {
-    const kindFn = createKindFunction<string, T>(kind, name, instanceConfig)
-    Object.defineProperty(errorSetObj, kind, {
-      value: kindFn,
-      writable: false,
-      enumerable: true,
-      configurable: false,
-    })
-  }
+      // Attach Type helper (returns undefined but provides type inference)
+      Object.defineProperty(errorSetObj, "Type", {
+        value: undefined,
+        writable: false,
+        enumerable: false,
+        configurable: false,
+      })
 
-  // Attach Type helper (returns undefined but provides type inference)
-  Object.defineProperty(errorSetObj, "Type", {
-    value: undefined,
-    writable: false,
-    enumerable: false,
-    configurable: false,
-  })
+      // Attach recover method bound to this guard
+      Object.defineProperty(errorSetObj, "recover", {
+        value: <Success, R>(
+          value: Success | Err<Kinds[number], Partial<T>>,
+          handlers: RecoverHandlers<Kinds[number], T, R>
+        ): Success | R => recover(value, guard, handlers),
+        writable: false,
+        enumerable: false,
+        configurable: false,
+      })
 
-  // Attach recover method bound to this guard
-  Object.defineProperty(errorSetObj, "recover", {
-    value: <Success, R>(
-      value: Success | Err<string, Partial<T>>,
-      handlers: RecoverHandlers<string, T, R>
-    ): Success | R => recover(value, guard, handlers),
-    writable: false,
-    enumerable: false,
-    configurable: false,
-  })
+      // Attach inspect method bound to this guard
+      Object.defineProperty(errorSetObj, "inspect", {
+        value: <Success>(
+          value: Success | Err<Kinds[number], Partial<T>>,
+          handlers: InspectHandlers<Kinds[number], T>
+        ): void => inspect(value, guard, handlers),
+        writable: false,
+        enumerable: false,
+        configurable: false,
+      })
 
-  // Attach inspect method bound to this guard
-  Object.defineProperty(errorSetObj, "inspect", {
-    value: <Success>(
-      value: Success | Err<string, Partial<T>>,
-      handlers: InspectHandlers<string, T>
-    ): void => inspect(value, guard, handlers),
-    writable: false,
-    enumerable: false,
-    configurable: false,
-  })
+      // Attach merge method
+      Object.defineProperty(errorSetObj, "merge", {
+        value: <Kinds2 extends string, T2 extends Record<string, unknown>>(
+          other: SetGuardWithKinds<Kinds2, T2>
+        ): SetGuardWithKinds<Kinds[number] | Kinds2, Record<string, unknown>> =>
+          merge(guard, other),
+        writable: false,
+        enumerable: false,
+        configurable: false,
+      })
 
-  // Attach merge method
-  Object.defineProperty(errorSetObj, "merge", {
-    value: <Kinds2 extends string, T2 extends Record<string, unknown>>(
-      other: SetGuardWithKinds<Kinds2, T2>
-    ): SetGuardWithKinds<string | Kinds2, Record<string, unknown>> =>
-      merge(guard, other),
-    writable: false,
-    enumerable: false,
-    configurable: false,
-  })
+      // Attach capture method
+      Object.defineProperty(errorSetObj, "capture", {
+        value: <Result>(
+          fn: () => Result,
+          mapper: ErrorMapper<Kinds[number], T>
+        ): Result | Err<Kinds[number], Partial<T>> => captureSync(fn, mapper),
+        writable: false,
+        enumerable: false,
+        configurable: false,
+      })
 
-  // Attach capture method
-  Object.defineProperty(errorSetObj, "capture", {
-    value: <Result>(
-      fn: () => Result,
-      mapper: ErrorMapper<string, T>
-    ): Result | Err<string, Partial<T>> => captureSync(fn, mapper),
-    writable: false,
-    enumerable: false,
-    configurable: false,
-  })
+      // Attach captureAsync method
+      Object.defineProperty(errorSetObj, "captureAsync", {
+        value: <Result>(
+          fn: () => Promise<Result>,
+          mapper: ErrorMapper<Kinds[number], T>
+        ): Promise<Result | Err<Kinds[number], Partial<T>>> =>
+          captureAsync(fn, mapper),
+        writable: false,
+        enumerable: false,
+        configurable: false,
+      })
 
-  // Attach captureAsync method
-  Object.defineProperty(errorSetObj, "captureAsync", {
-    value: <Result>(
-      fn: () => Promise<Result>,
-      mapper: ErrorMapper<string, T>
-    ): Promise<Result | Err<string, Partial<T>>> => captureAsync(fn, mapper),
-    writable: false,
-    enumerable: false,
-    configurable: false,
-  })
+      // Attach Symbol.iterator for iteration over kinds
+      Object.defineProperty(errorSetObj, Symbol.iterator, {
+        *value(): IterableIterator<string> {
+          yield* kinds
+        },
+        writable: false,
+        enumerable: false,
+        configurable: false,
+      })
 
-  // Attach Symbol.iterator for iteration over kinds
-  Object.defineProperty(errorSetObj, Symbol.iterator, {
-    *value(): IterableIterator<string> {
-      yield* kinds
+      return errorSetObj
     },
-    writable: false,
-    enumerable: false,
-    configurable: false,
-  })
-
-  return errorSetObj
+  }
 }

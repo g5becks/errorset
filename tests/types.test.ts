@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from "bun:test"
-import { ERR, type Err, errorSet, isErr } from "../src/index.ts"
+import { ERR, errorSet, isErr } from "../src/index.ts"
 
 describe("ERR Symbol", () => {
   it("should be a unique symbol", () => {
@@ -21,38 +21,29 @@ describe("ERR Symbol", () => {
 describe("Err Type Structure", () => {
   type User = { id: string; name: string; email: string }
 
-  const UserError = errorSet<User>("UserError", "not_found", "suspended")
-  // Runtime access - TypeScript loses literal kinds
-  const not_found = (UserError as Record<string, unknown>).not_found as (
-    s: TemplateStringsArray,
-    ...k: string[]
-  ) => (
-    d: Partial<User>,
-    opts?: { cause?: Err<string, Record<string, unknown>> }
-  ) => Err<string, Partial<User>>
-  const suspended = (UserError as Record<string, unknown>).suspended as (
-    s: TemplateStringsArray,
-    ...k: string[]
-  ) => (d: User) => Err<string, User>
+  const UserError = errorSet("UserError", [
+    "not_found",
+    "suspended",
+  ] as const).init<User>()
 
   it("should have required ERR brand property", () => {
-    const err = not_found`User ${"id"} not found`({ id: "123" })
+    const err = UserError.not_found`User ${"id"} not found`({ id: "123" })
     expect(ERR in err).toBe(true)
     expect(err[ERR]).toBe(true)
   })
 
   it("should have required kind property", () => {
-    const err = not_found`User ${"id"} not found`({ id: "123" })
+    const err = UserError.not_found`User ${"id"} not found`({ id: "123" })
     expect(err.kind).toBe("not_found")
   })
 
   it("should have required message property", () => {
-    const err = not_found`User ${"id"} not found`({ id: "123" })
+    const err = UserError.not_found`User ${"id"} not found`({ id: "123" })
     expect(err.message).toBe("User 123 not found")
   })
 
   it("should have required data property with extracted fields", () => {
-    const err = not_found`User ${"id"} (${"name"}) not found`({
+    const err = UserError.not_found`User ${"id"} (${"name"}) not found`({
       id: "123",
       name: "John",
     })
@@ -60,18 +51,19 @@ describe("Err Type Structure", () => {
   })
 
   it("should support optional cause property", () => {
-    const cause = suspended`Account suspended`({
+    const cause = UserError.suspended`Account ${"id"} suspended`({
       id: "456",
-      name: "Jane",
-      email: "jane@example.com",
     })
-    const err = not_found`User ${"id"} not found`({ id: "123" }, { cause })
+    const err = UserError.not_found`User ${"id"} not found`(
+      { id: "123" },
+      { cause }
+    )
     expect(err.cause).toBeDefined()
     expect(err.cause?.kind).toBe("suspended")
   })
 
   it("should not have cause when not provided", () => {
-    const err = not_found`User ${"id"} not found`({ id: "123" })
+    const err = UserError.not_found`User ${"id"} not found`({ id: "123" })
     expect(err.cause).toBeUndefined()
   })
 })
@@ -79,14 +71,10 @@ describe("Err Type Structure", () => {
 describe("Err Readonly Behavior", () => {
   type User = { id: string; name: string }
 
-  const UserError = errorSet<User>("UserError", "not_found")
-  const not_found = (UserError as Record<string, unknown>).not_found as (
-    s: TemplateStringsArray,
-    ...k: string[]
-  ) => (d: Partial<User>) => Err<"not_found", { id: string }>
+  const UserError = errorSet("UserError", ["not_found"] as const).init<User>()
 
   it("should have readonly properties", () => {
-    const err = not_found`User ${"id"} not found`({
+    const err = UserError.not_found`User ${"id"} not found`({
       id: "123",
     })
 
@@ -101,14 +89,10 @@ describe("Err Readonly Behavior", () => {
 describe("isErr Helper", () => {
   type User = { id: string }
 
-  const UserError = errorSet<User>("UserError", "not_found")
-  const not_found = (UserError as Record<string, unknown>).not_found as (
-    s: TemplateStringsArray,
-    ...k: string[]
-  ) => (d: User) => Err<string, User>
+  const UserError = errorSet("UserError", ["not_found"] as const).init<User>()
 
   it("should return true for error set values", () => {
-    const err = not_found`User ${"id"} not found`({ id: "123" })
+    const err = UserError.not_found`User ${"id"} not found`({ id: "123" })
     expect(isErr(err)).toBe(true)
   })
 

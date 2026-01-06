@@ -26,12 +26,13 @@ Libraries like `neverthrow` address some of this, but they introduce functional 
 Errors are just values. You return them from functions. You check them with guards. You use native `if/switch` to handle them.
 
 ```typescript
-import { errorSet } from "errorset";
+import { errorSet } from "@takinprofit/errorset";
 
 type User = { id: string; name: string; email: string };
 
 // Define your error set — bound to a domain type
-const UserError = errorSet<User>("UserError", "not_found", "suspended", "invalid");
+const UserError = errorSet("UserError", ["not_found", "suspended", "invalid"] as const)
+  .init<User>();
 export type UserError = typeof UserError.Type;
 
 // Return errors instead of throwing
@@ -66,10 +67,10 @@ console.log(result.name);
 
 ```bash
 # bun
-bun add errorset
+bun add @takinprofit/errorset
 
 # npm/yarn/pnpm
-npm install errorset
+npm install @takinprofit/errorset
 ```
 
 Requires TypeScript 5+.
@@ -94,19 +95,22 @@ This library is for **expected failures** — outcomes that are failures but are
 
 ## Creating Error Sets
 
-Define error sets with `errorSet<T>()` where `T` is your domain type:
+Define error sets with the builder pattern:
 
 ```typescript
-import { errorSet } from "errorset";
+import { errorSet } from "@takinprofit/errorset";
 
 type User = { id: string; name: string; email: string };
 
-// Name first, then error kinds
-const UserError = errorSet<User>("UserError", "not_found", "suspended", "invalid");
+// Name and kinds first, then bind the entity type with .init<T>()
+const UserError = errorSet("UserError", ["not_found", "suspended", "invalid"] as const)
+  .init<User>();
 
 // Export a type with the same name for type-value identity
 export type UserError = typeof UserError.Type;
 ```
+
+**Important**: Use `as const` on the kinds array to preserve literal types. This ensures `result.kind` is typed as `"not_found" | "suspended" | "invalid"` rather than just `string`.
 
 With this pattern, `UserError` works like a native class or enum — you can use it in both type and value positions:
 
@@ -118,28 +122,16 @@ function getUser(id: string): User | UserError { ... }
 if (UserError(result)) { ... }
 ```
 
-### Alternative Object Syntax
+### Per-Instance Configuration
 
-You can also create error sets with an options object:
-
-```typescript
-const UserError = errorSet<User>({
-  name: "UserError",
-  kinds: ["not_found", "suspended", "invalid"]
-});
-```
-
-This form supports **per-instance configuration** that overrides global settings:
+You can pass configuration options to `.init<T>()`:
 
 ```typescript
-const VerboseError = errorSet<User>({
-  name: "VerboseError",
-  kinds: ["error"],
-  config: {
+const VerboseError = errorSet("VerboseError", ["error"] as const)
+  .init<User>({
     includeStack: true,
     format: "pretty"
-  }
-});
+  });
 ```
 
 Per-instance config only affects that error set — other sets continue using global config.
@@ -163,14 +155,6 @@ err.data;    // { id: "123" } — only referenced fields
 ```
 
 This is the key insight: template holes aren't just for interpolation. They tell errorset which fields matter for this error, and those fields are automatically extracted into `err.data`.
-
-### Empty Templates
-
-For errors that don't need a message:
-
-```typescript
-UserError.suspended``(user);  // message: "", data: {}
-```
 
 ### Error Chaining
 
@@ -247,7 +231,7 @@ if (UserError.suspended(result)) {
 Check if *any* value is *any* error from *any* set:
 
 ```typescript
-import { isErr } from "errorset";
+import { isErr } from "@takinprofit/errorset";
 
 if (isErr(result)) {
   console.log(result.kind, result.message);
@@ -344,8 +328,8 @@ function processCheckout(id: string): Receipt | UserError | DbError {
 Merge error sets when you need to check for errors from multiple sources:
 
 ```typescript
-const UserError = errorSet<User>("UserError", "not_found", "suspended");
-const DbError = errorSet<DbContext>("DbError", "timeout", "connection");
+const UserError = errorSet("UserError", ["not_found", "suspended"] as const).init<User>();
+const DbError = errorSet("DbError", ["timeout", "connection"] as const).init<DbContext>();
 
 const ServiceError = UserError.merge(DbError);
 
@@ -411,7 +395,7 @@ const result = await DbError.captureAsync(
 ## Configuration
 
 ```typescript
-import { configure } from "errorset";
+import { configure } from "@takinprofit/errorset";
 
 configure({
   format: "pretty" | "json" | "minimal",
@@ -449,8 +433,8 @@ console.log(err);
 
 | API | Purpose |
 |---|---|
-| `errorSet<T>(name, ...kinds)` | Define error set (positional) |
-| `errorSet<T>({ name, kinds, config? })` | Define error set (object) |
+| `errorSet(name, kinds).init<T>()` | Define error set with builder pattern |
+| `errorSet(name, kinds).init<T>(config)` | Define with per-instance config |
 | `type X = typeof X.Type` | Type-value identity |
 | `Set.kind\`msg\`(data)` | Create error |
 | `Set.kind\`msg\`(data, { cause })` | Create with cause |

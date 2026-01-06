@@ -17,16 +17,10 @@ const noHandlerRegex = /No handler found for error kind: suspended/
 describe("recover Method", () => {
   type User = { id: string; name: string }
 
-  const UserError = errorSet<User>("UserError", "not_found", "suspended")
-  // Runtime access - TypeScript loses literal kinds
-  const not_found = (UserError as Record<string, unknown>).not_found as (
-    s: TemplateStringsArray,
-    ...k: string[]
-  ) => (d: Partial<User>) => Err<string, Partial<User>>
-  const suspended = (UserError as Record<string, unknown>).suspended as (
-    s: TemplateStringsArray,
-    ...k: string[]
-  ) => (d: Partial<User>) => Err<string, Partial<User>>
+  const UserError = errorSet("UserError", [
+    "not_found",
+    "suspended",
+  ] as const).init<User>()
 
   it("should return success value unchanged if not an error", () => {
     const user = { id: "123", name: "John" }
@@ -37,7 +31,7 @@ describe("recover Method", () => {
   })
 
   it("should apply specific handler for matching kind", () => {
-    const err = not_found`User ${"id"} not found`({ id: "123" })
+    const err = UserError.not_found`User ${"id"} not found`({ id: "123" })
     const result = UserError.recover(err, {
       not_found: () => ({ id: "guest", name: "Guest User" }),
       suspended: () => ({ id: "blocked", name: "Blocked User" }),
@@ -46,7 +40,7 @@ describe("recover Method", () => {
   })
 
   it("should apply catch-all handler when no specific match", () => {
-    const err = suspended`Account suspended`({ id: "123", name: "John" })
+    const err = UserError.suspended`Account ${"id"} suspended`({ id: "123" })
     const result = UserError.recover(err, {
       not_found: () => ({ id: "guest", name: "Guest" }),
       _: () => ({ id: "default", name: "Default User" }),
@@ -55,7 +49,7 @@ describe("recover Method", () => {
   })
 
   it("should throw if no matching handler found", () => {
-    const err = suspended`Account suspended`({ id: "123", name: "John" })
+    const err = UserError.suspended`Account ${"id"} suspended`({ id: "123" })
     expect(() => {
       UserError.recover(err, {
         not_found: () => ({ id: "guest", name: "Guest" }),
@@ -64,7 +58,7 @@ describe("recover Method", () => {
   })
 
   it("should pass error to handler", () => {
-    const err = not_found`User ${"id"} not found`({ id: "123" })
+    const err = UserError.not_found`User ${"id"} not found`({ id: "123" })
     const result = UserError.recover(err, {
       not_found: e => ({ id: e.data.id ?? "unknown", name: "Recovered" }),
     })
@@ -75,11 +69,10 @@ describe("recover Method", () => {
 describe("inspect Method", () => {
   type User = { id: string; name: string }
 
-  const UserError = errorSet<User>("UserError", "not_found", "suspended")
-  const not_found = (UserError as Record<string, unknown>).not_found as (
-    s: TemplateStringsArray,
-    ...k: string[]
-  ) => (d: Partial<User>) => Err<string, Partial<User>>
+  const UserError = errorSet("UserError", [
+    "not_found",
+    "suspended",
+  ] as const).init<User>()
 
   it("should do nothing if value is not an error", () => {
     const handler = mock(() => undefined)
@@ -92,7 +85,7 @@ describe("inspect Method", () => {
 
   it("should call matching handler for error kind", () => {
     const handler = mock(() => undefined)
-    const err = not_found`User ${"id"} not found`({ id: "123" })
+    const err = UserError.not_found`User ${"id"} not found`({ id: "123" })
     UserError.inspect(err, {
       not_found: handler,
     })
@@ -102,7 +95,7 @@ describe("inspect Method", () => {
   it("should not call handler for non-matching kinds", () => {
     const notFoundHandler = mock(() => undefined)
     const suspendedHandler = mock(() => undefined)
-    const err = not_found`User ${"id"} not found`({ id: "123" })
+    const err = UserError.not_found`User ${"id"} not found`({ id: "123" })
     UserError.inspect(err, {
       not_found: notFoundHandler,
       suspended: suspendedHandler,
@@ -112,7 +105,7 @@ describe("inspect Method", () => {
   })
 
   it("should return void", () => {
-    const err = not_found`User ${"id"} not found`({ id: "123" })
+    const err = UserError.not_found`User ${"id"} not found`({ id: "123" })
     const result = UserError.inspect(err, {
       not_found: () => undefined,
     })
@@ -120,11 +113,7 @@ describe("inspect Method", () => {
   })
 
   it("should not call any handler if none match", () => {
-    const suspended = (UserError as Record<string, unknown>).suspended as (
-      s: TemplateStringsArray,
-      ...k: string[]
-    ) => (d: Partial<User>) => Err<string, Partial<User>>
-    const err = suspended`Account suspended`({ id: "123", name: "John" })
+    const err = UserError.suspended`Account ${"id"} suspended`({ id: "123" })
     const handler = mock(() => undefined)
     UserError.inspect(err, {
       not_found: handler,
@@ -137,8 +126,14 @@ describe("merge Method", () => {
   type User = { id: string; name: string }
   type Order = { orderId: string; total: number }
 
-  const UserError = errorSet<User>("UserError", "not_found", "suspended")
-  const OrderError = errorSet<Order>("OrderError", "cancelled", "expired")
+  const UserError = errorSet("UserError", [
+    "not_found",
+    "suspended",
+  ] as const).init<User>()
+  const OrderError = errorSet("OrderError", [
+    "cancelled",
+    "expired",
+  ] as const).init<Order>()
 
   it("should combine kinds from both error sets", () => {
     const ServiceError = UserError.merge(OrderError)
@@ -152,17 +147,9 @@ describe("merge Method", () => {
 
   it("should check errors from either set", () => {
     const ServiceError = UserError.merge(OrderError)
-    const not_found = (UserError as Record<string, unknown>).not_found as (
-      s: TemplateStringsArray,
-      ...k: string[]
-    ) => (d: Partial<User>) => Err<string, Partial<User>>
-    const cancelled = (OrderError as Record<string, unknown>).cancelled as (
-      s: TemplateStringsArray,
-      ...k: string[]
-    ) => (d: Partial<Order>) => Err<string, Partial<Order>>
 
-    const userErr = not_found`User ${"id"} not found`({ id: "123" })
-    const orderErr = cancelled`Order ${"orderId"} cancelled`({
+    const userErr = UserError.not_found`User ${"id"} not found`({ id: "123" })
+    const orderErr = OrderError.cancelled`Order ${"orderId"} cancelled`({
       orderId: "ORD-1",
     })
 
@@ -196,16 +183,19 @@ describe("merge Function (Standalone)", () => {
 describe("capture Method", () => {
   type DbContext = { query: string; message: string }
 
-  const DbError = errorSet<DbContext>("DbError", "connection", "query_failed")
-  const query_failed = (DbError as Record<string, unknown>).query_failed as (
-    s: TemplateStringsArray,
-    ...k: string[]
-  ) => (d: DbContext) => Err<string, Partial<DbContext>>
+  const DbError = errorSet("DbError", [
+    "connection",
+    "query_failed",
+  ] as const).init<DbContext>()
 
   it("should return function result if no error thrown", () => {
     const result = DbError.capture(
       () => 42,
-      () => query_failed`Query failed`({ query: "SELECT", message: "error" })
+      () =>
+        DbError.query_failed`Query failed`({
+          query: "SELECT",
+          message: "error",
+        })
     )
     expect(result).toBe(42)
   })
@@ -216,8 +206,7 @@ describe("capture Method", () => {
         throw new Error("Connection refused")
       },
       e =>
-        query_failed`Query failed: ${"message"}`({
-          query: "SELECT",
+        DbError.query_failed`Query failed: ${"message"}`({
           message: e.message,
         })
     )
@@ -235,8 +224,7 @@ describe("capture Method", () => {
       throw "string error" as unknown as Error
     }
     const result = DbError.capture(throwNonError, e =>
-      query_failed`Query failed: ${"message"}`({
-        query: "SELECT",
+      DbError.query_failed`Query failed: ${"message"}`({
         message: e.message,
       })
     )
@@ -252,11 +240,10 @@ describe("capture Method", () => {
 describe("captureAsync Method", () => {
   type DbContext = { query: string; message: string }
 
-  const DbError = errorSet<DbContext>("DbError", "connection", "query_failed")
-  const query_failed = (DbError as Record<string, unknown>).query_failed as (
-    s: TemplateStringsArray,
-    ...k: string[]
-  ) => (d: DbContext) => Err<string, Partial<DbContext>>
+  const DbError = errorSet("DbError", [
+    "connection",
+    "query_failed",
+  ] as const).init<DbContext>()
 
   it("should return async function result if no error thrown", async () => {
     const result = await DbError.captureAsync(
@@ -264,7 +251,11 @@ describe("captureAsync Method", () => {
         await Promise.resolve()
         return 42
       },
-      () => query_failed`Query failed`({ query: "SELECT", message: "error" })
+      () =>
+        DbError.query_failed`Query failed`({
+          query: "SELECT",
+          message: "error",
+        })
     )
     expect(result).toBe(42)
   })
@@ -276,8 +267,7 @@ describe("captureAsync Method", () => {
         throw new Error("Timeout")
       },
       e =>
-        query_failed`Query failed: ${"message"}`({
-          query: "SELECT",
+        DbError.query_failed`Query failed: ${"message"}`({
           message: e.message,
         })
     )
@@ -296,8 +286,7 @@ describe("captureAsync Method", () => {
       throw 404 as unknown as Error
     }
     const result = await DbError.captureAsync(throwNonError, e =>
-      query_failed`Query failed: ${"message"}`({
-        query: "SELECT",
+      DbError.query_failed`Query failed: ${"message"}`({
         message: e.message,
       })
     )
