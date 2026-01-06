@@ -10,8 +10,10 @@ import {
   type Err,
   type ErrorSetConfig,
   errorSet,
+  type HasDuplicates,
   isErr,
   type KindFunction,
+  type NoDuplicates,
 } from "../dist/index.js"
 
 // =============================================================================
@@ -38,7 +40,7 @@ const UserError = errorSet("UserError", [
   "not_found",
   "suspended",
   "invalid",
-] as const).init<User>()
+]).init<User>()
 
 // The error set should be callable (set-level guard)
 expectType<boolean>(UserError({} as unknown))
@@ -66,14 +68,14 @@ const OrderError = errorSet("OrderError", [
   "cancelled",
   "payment_failed",
   "out_of_stock",
-] as const).init<Order>()
+]).init<Order>()
 
 // Should produce same shape
 expectType<boolean>(OrderError({} as unknown))
 expectAssignable<readonly string[]>(OrderError.kinds)
 
 // Builder API with config
-const VerboseError = errorSet("VerboseError", ["error"] as const).init<User>({
+const VerboseError = errorSet("VerboseError", ["error"]).init<User>({
   includeStack: true,
   format: "pretty",
 })
@@ -260,3 +262,65 @@ expectAssignable<Err<string, Partial<User>> | undefined>(UserError.Type)
 
 // instanceof check should work (returns boolean)
 expectType<boolean>(userResult instanceof UserError)
+
+// =============================================================================
+// HasDuplicates type utility
+// =============================================================================
+
+// No duplicates should return false
+expectType<false>({} as HasDuplicates<["a", "b", "c"]>)
+expectType<false>({} as HasDuplicates<["not_found", "suspended", "invalid"]>)
+expectType<false>({} as HasDuplicates<["x"]>)
+expectType<false>({} as HasDuplicates<[]>)
+
+// Duplicates should return true
+expectType<true>({} as HasDuplicates<["a", "b", "a"]>)
+expectType<true>({} as HasDuplicates<["a", "a"]>)
+expectType<true>({} as HasDuplicates<["not_found", "suspended", "not_found"]>)
+expectType<true>({} as HasDuplicates<["x", "y", "z", "x"]>)
+
+// =============================================================================
+// NoDuplicates type utility
+// =============================================================================
+
+// No duplicates should return the original tuple type
+expectType<["a", "b", "c"]>({} as NoDuplicates<["a", "b", "c"]>)
+expectType<["not_found", "suspended"]>(
+  {} as NoDuplicates<["not_found", "suspended"]>
+)
+expectType<[]>({} as NoDuplicates<[]>)
+
+// Duplicates should return never
+expectType<never>({} as NoDuplicates<["a", "b", "a"]>)
+expectType<never>({} as NoDuplicates<["a", "a"]>)
+expectType<never>({} as NoDuplicates<["x", "y", "x", "z"]>)
+
+// =============================================================================
+// Duplicate detection in errorSet - compile-time errors
+// =============================================================================
+
+// Valid error sets (no duplicates) should compile fine
+const ValidError1 = errorSet("ValidError1", ["a", "b", "c"]).init()
+const ValidError2 = errorSet("ValidError2", ["not_found"]).init()
+const ValidError3 = errorSet("ValidError3", [
+  "error",
+  "warning",
+  "info",
+]).init<User>()
+
+expectType<boolean>(ValidError1({} as unknown))
+expectType<boolean>(ValidError2({} as unknown))
+expectType<boolean>(ValidError3({} as unknown))
+
+// Duplicate kinds should cause a compile-time error
+// @ts-expect-error - duplicate kind "a" should fail NoDuplicates constraint
+errorSet("BadError1", ["a", "b", "a"])
+
+// @ts-expect-error - duplicate kind "not_found" should fail NoDuplicates constraint
+errorSet("BadError2", ["not_found", "suspended", "not_found"])
+
+// @ts-expect-error - adjacent duplicates should also fail
+errorSet("BadError3", ["x", "x"])
+
+// @ts-expect-error - duplicates at different positions should fail
+errorSet("BadError4", ["a", "b", "c", "b"])

@@ -24,19 +24,19 @@ describe("Error Chaining", () => {
     "not_found",
     "suspended",
     "invalid",
-  ] as const).init<User>()
+  ]).init<User>()
 
   const OrderError = errorSet("OrderError", [
     "not_found",
     "cancelled",
     "invalid",
-  ] as const).init<Order>()
+  ]).init<Order>()
 
   const PaymentError = errorSet("PaymentError", [
     "failed",
     "declined",
     "timeout",
-  ] as const).init<Payment>()
+  ]).init<Payment>()
 
   describe("cause property preservation", () => {
     it("should preserve cause through single level", () => {
@@ -167,20 +167,20 @@ describe("Real-World Workflows", () => {
     "not_found",
     "connection_failed",
     "constraint_violation",
-  ] as const).init<{ table: string; id: string; message: string }>()
+  ]).init<{ table: string; id: string; message: string }>()
 
   // Service layer errors (domain)
   const UserServiceError = errorSet("UserServiceError", [
     "user_not_found",
     "user_suspended",
     "validation_failed",
-  ] as const).init<User>()
+  ]).init<User>()
 
   const OrderServiceError = errorSet("OrderServiceError", [
     "order_not_found",
     "insufficient_stock",
     "payment_required",
-  ] as const).init<Order>()
+  ]).init<Order>()
 
   // Merged service error for handlers
   const ServiceError = UserServiceError.merge(OrderServiceError)
@@ -372,7 +372,7 @@ describe("Real-World Workflows", () => {
       "network_error",
       "timeout",
       "invalid_response",
-    ] as const).init<{ url: string; message: string }>()
+    ]).init<{ url: string; message: string }>()
 
     it("should capture thrown errors from external calls", () => {
       const fetchData = () => {
@@ -415,10 +415,7 @@ describe("Real-World Workflows", () => {
 describe("Symbols and Coercion Edge Cases", () => {
   type Entity = { id: string; value: number }
 
-  const TestError = errorSet("TestError", [
-    "error_a",
-    "error_b",
-  ] as const).init<Entity>()
+  const TestError = errorSet("TestError", ["error_a", "error_b"]).init<Entity>()
 
   describe("nodejs.util.inspect.custom symbol", () => {
     it("should have inspect symbol on errors", () => {
@@ -491,7 +488,7 @@ describe("Symbols and Coercion Edge Cases", () => {
         "first",
         "second",
         "third",
-      ] as const).init<Entity>()
+      ]).init<Entity>()
 
       const kinds = [...OrderedError]
       expect(kinds).toEqual(["first", "second", "third"])
@@ -528,9 +525,7 @@ describe("Symbols and Coercion Edge Cases", () => {
     })
 
     it("should return false for errors from different sets", () => {
-      const OtherError = errorSet("OtherError", [
-        "other",
-      ] as const).init<Entity>()
+      const OtherError = errorSet("OtherError", ["other"]).init<Entity>()
       const err = OtherError.other`Test`({} as Entity)
       expect(err instanceof TestError).toBe(false)
     })
@@ -550,13 +545,13 @@ describe("Tag Collisions in Merged Sets", () => {
     "not_found",
     "invalid",
     "unique_a",
-  ] as const).init<EntityA>()
+  ]).init<EntityA>()
 
   const SetB = errorSet("SetB", [
     "not_found",
     "invalid",
     "unique_b",
-  ] as const).init<EntityB>()
+  ]).init<EntityB>()
 
   const MergedSet = SetA.merge(SetB)
 

@@ -97,6 +97,47 @@ export type ErrorOptions = {
 }
 
 /**
+ * Recursively checks if a tuple contains duplicate string literals.
+ *
+ * Works by checking if the first element exists in the rest of the tuple,
+ * then recursively checking the rest.
+ *
+ * @typeParam T - Readonly tuple of string literals to check
+ * @returns `true` if duplicates exist, `false` otherwise
+ *
+ * @example
+ * ```ts
+ * type A = HasDuplicates<["a", "b", "c"]>  // false
+ * type B = HasDuplicates<["a", "b", "a"]>  // true
+ * ```
+ */
+export type HasDuplicates<T extends readonly string[]> = T extends readonly [
+  infer Head extends string,
+  ...infer Tail extends string[],
+]
+  ? Head extends Tail[number]
+    ? true
+    : HasDuplicates<Tail>
+  : false
+
+/**
+ * Type constraint that resolves to `never` if duplicates exist in the tuple.
+ *
+ * Used to create compile-time errors when duplicate kinds are provided to errorSet().
+ *
+ * @typeParam T - Readonly tuple of string literals to validate
+ * @returns The input tuple type if no duplicates, `never` if duplicates exist
+ *
+ * @example
+ * ```ts
+ * type A = NoDuplicates<["a", "b", "c"]>  // ["a", "b", "c"]
+ * type B = NoDuplicates<["a", "b", "a"]>  // never
+ * ```
+ */
+export type NoDuplicates<T extends readonly string[]> =
+  HasDuplicates<T> extends true ? never : T
+
+/**
  * Builder type returned by errorSet() that allows binding the entity type.
  *
  * @typeParam Kinds - Tuple type of error kind strings
@@ -111,11 +152,11 @@ export type ErrorSetBuilder<Kinds extends readonly string[]> = {
    *
    * @example
    * ```ts
-   * const UserError = errorSet("UserError", ["not_found", "suspended"] as const)
+   * const UserError = errorSet("UserError", ["not_found", "suspended"])
    *   .init<User>()
    *
    * // With config
-   * const VerboseError = errorSet("VerboseError", ["error"] as const)
+   * const VerboseError = errorSet("VerboseError", ["error"])
    *   .init<User>({ includeStack: true })
    * ```
    */
@@ -790,20 +831,25 @@ export type ErrorSet<
  * Use the builder pattern: call errorSet() with name and kinds, then .init<T>()
  * to bind the entity type.
  *
+ * **Duplicate Detection:** The function validates that all kinds are unique.
+ * Duplicates cause a compile-time error (via `NoDuplicates` type constraint)
+ * and a runtime error for JavaScript consumers or edge cases.
+ *
  * @param name - Name of the error set (for debugging, e.g., "UserError")
- * @param kinds - Array of error kind strings with `as const` for literal inference
+ * @param kinds - Array of unique error kind strings (literal types inferred automatically)
  * @returns Builder with .init<T>() method to complete the error set
+ * @throws {Error} If duplicate kinds are provided (e.g., `["a", "b", "a"]`)
  *
  * @example
  * ```ts
  * type User = { name: string; id: string }
  *
  * // Create error set with builder pattern
- * const UserError = errorSet("UserError", ["not_found", "suspended", "invalid"] as const)
+ * const UserError = errorSet("UserError", ["not_found", "suspended", "invalid"])
  *   .init<User>()
  *
  * // With optional config
- * const VerboseError = errorSet("VerboseError", ["error"] as const)
+ * const VerboseError = errorSet("VerboseError", ["error"])
  *   .init<User>({ includeStack: true, stackDepth: 5 })
  *
  * // Create errors with type-safe template literals
@@ -816,12 +862,24 @@ export type ErrorSet<
  *
  * // Export type with same name
  * export type UserError = typeof UserError.Type
+ *
+ * // Duplicate kinds cause compile-time AND runtime errors:
+ * // const Bad = errorSet("Bad", ["a", "b", "a"])  // ❌ TypeScript error
  * ```
  */
 export function errorSet<
   N extends string,
   const Kinds extends readonly string[],
->(name: N, kinds: Kinds): ErrorSetBuilder<Kinds> {
+>(name: N, kinds: NoDuplicates<Kinds>): ErrorSetBuilder<Kinds> {
+  // Runtime validation for JavaScript consumers or edge cases
+  const seen = new Set<string>()
+  for (const kind of kinds) {
+    if (seen.has(kind)) {
+      throw new Error(`Duplicate kind "${kind}" in error set "${name}"`)
+    }
+    seen.add(kind)
+  }
+
   return {
     init<T extends Record<string, unknown>>(
       config?: ErrorSetConfig

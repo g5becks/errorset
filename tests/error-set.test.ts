@@ -13,7 +13,7 @@ describe("errorSet Factory", () => {
     const UserError = errorSet("UserError", [
       "not_found",
       "suspended",
-    ] as const).init<User>()
+    ]).init<User>()
     expect(UserError).toBeDefined()
     expect(typeof UserError).toBe("function")
   })
@@ -22,7 +22,7 @@ describe("errorSet Factory", () => {
     const UserError = errorSet("UserError", [
       "not_found",
       "suspended",
-    ] as const).init<User>()
+    ]).init<User>()
     expect(UserError.not_found).toBeDefined()
     expect(UserError.suspended).toBeDefined()
   })
@@ -31,8 +31,25 @@ describe("errorSet Factory", () => {
     const UserError = errorSet("UserError", [
       "not_found",
       "suspended",
-    ] as const).init<User>()
+    ]).init<User>()
     expect(UserError.kinds).toEqual(["not_found", "suspended"])
+  })
+
+  it("should throw error for duplicate kinds", () => {
+    // Runtime validation for JS consumers or edge cases where types are bypassed
+    const kinds = ["not_found", "invalid", "not_found"]
+    expect(() => {
+      // biome-ignore lint/suspicious/noExplicitAny: Testing runtime validation
+      errorSet("BadError", kinds as any).init()
+    }).toThrow('Duplicate kind "not_found" in error set "BadError"')
+  })
+
+  it("should throw error for adjacent duplicate kinds", () => {
+    const kinds = ["a", "a"]
+    expect(() => {
+      // biome-ignore lint/suspicious/noExplicitAny: Testing runtime validation
+      errorSet("BadError", kinds as any).init()
+    }).toThrow('Duplicate kind "a" in error set "BadError"')
   })
 })
 
@@ -42,7 +59,7 @@ describe("errorSet as Set Guard", () => {
   const UserError = errorSet("UserError", [
     "not_found",
     "suspended",
-  ] as const).init<User>()
+  ]).init<User>()
 
   it("should act as callable set-level guard", () => {
     const err = UserError.not_found`User ${"id"} not found`({
@@ -75,7 +92,7 @@ describe("errorSet Kind Functions", () => {
   const OrderError = errorSet("OrderError", [
     "cancelled",
     "expired",
-  ] as const).init<Order>()
+  ]).init<Order>()
 
   it("should create errors with template literal syntax", () => {
     const err = OrderError.cancelled`Order ${"orderId"} was cancelled`({
@@ -125,7 +142,7 @@ describe("errorSet Iterator", () => {
     "not_found",
     "suspended",
     "invalid",
-  ] as const).init<User>()
+  ]).init<User>()
 
   it("should support for...of iteration", () => {
     const kinds: string[] = []
@@ -149,7 +166,7 @@ describe("errorSet Iterator", () => {
 describe("errorSet Type Helper", () => {
   type User = { id: string }
 
-  const UserError = errorSet("UserError", ["not_found"] as const).init<User>()
+  const UserError = errorSet("UserError", ["not_found"]).init<User>()
 
   it("should have Type property for type exports", () => {
     // Type property exists but is undefined at runtime
@@ -165,7 +182,7 @@ describe("errorSet Helper Methods", () => {
   const UserError = errorSet("UserError", [
     "not_found",
     "suspended",
-  ] as const).init<User>()
+  ]).init<User>()
 
   it("should have recover method", () => {
     expect(typeof UserError.recover).toBe("function")
@@ -191,7 +208,7 @@ describe("errorSet Helper Methods", () => {
 describe("errorSet Custom Inspect", () => {
   type User = { id: string; name: string }
 
-  const UserError = errorSet("UserError", ["not_found"] as const).init<User>()
+  const UserError = errorSet("UserError", ["not_found"]).init<User>()
 
   it("should have custom inspect symbol for Node.js debuggers", () => {
     const err = UserError.not_found`User ${"id"} not found`({

@@ -108,14 +108,14 @@ describe("Stack Trace Configuration", () => {
   })
 
   it("should not include stack by default", () => {
-    const UserError = errorSet("UserError", ["not_found"] as const).init<User>()
+    const UserError = errorSet("UserError", ["not_found"]).init<User>()
     const err = UserError.not_found`User ${"id"} not found`({ id: "123" })
     expect(err.stack).toBeUndefined()
   })
 
   it("should include stack when configured globally", () => {
     configure({ includeStack: true })
-    const UserError = errorSet("UserError", ["not_found"] as const).init<User>()
+    const UserError = errorSet("UserError", ["not_found"]).init<User>()
     const err = UserError.not_found`User ${"id"} not found`({ id: "123" })
     // Stack should be defined in V8 engines (Bun)
     expect(err.stack).toBeDefined()
@@ -123,7 +123,7 @@ describe("Stack Trace Configuration", () => {
   })
 
   it("should include stack when configured per-instance", () => {
-    const UserError = errorSet("UserError", ["not_found"] as const).init<User>({
+    const UserError = errorSet("UserError", ["not_found"]).init<User>({
       includeStack: true,
     })
     const err = UserError.not_found`User ${"id"} not found`({ id: "123" })
@@ -134,7 +134,7 @@ describe("Stack Trace Configuration", () => {
 
   it("should respect stackDepth configuration", () => {
     configure({ includeStack: true, stackDepth: 5 })
-    const UserError = errorSet("UserError", ["not_found"] as const).init<User>()
+    const UserError = errorSet("UserError", ["not_found"]).init<User>()
     const err = UserError.not_found`User ${"id"} not found`({ id: "123" })
     expect(err.stack).toBeDefined()
     // Stack trace depth is limited

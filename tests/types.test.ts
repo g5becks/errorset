@@ -24,7 +24,7 @@ describe("Err Type Structure", () => {
   const UserError = errorSet("UserError", [
     "not_found",
     "suspended",
-  ] as const).init<User>()
+  ]).init<User>()
 
   it("should have required ERR brand property", () => {
     const err = UserError.not_found`User ${"id"} not found`({ id: "123" })
@@ -71,7 +71,7 @@ describe("Err Type Structure", () => {
 describe("Err Readonly Behavior", () => {
   type User = { id: string; name: string }
 
-  const UserError = errorSet("UserError", ["not_found"] as const).init<User>()
+  const UserError = errorSet("UserError", ["not_found"]).init<User>()
 
   it("should have readonly properties", () => {
     const err = UserError.not_found`User ${"id"} not found`({
@@ -89,7 +89,7 @@ describe("Err Readonly Behavior", () => {
 describe("isErr Helper", () => {
   type User = { id: string }
 
-  const UserError = errorSet("UserError", ["not_found"] as const).init<User>()
+  const UserError = errorSet("UserError", ["not_found"]).init<User>()
 
   it("should return true for error set values", () => {
     const err = UserError.not_found`User ${"id"} not found`({ id: "123" })

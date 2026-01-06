@@ -43,7 +43,7 @@ Error sets use a builder pattern for proper TypeScript type inference:
 const ErrorSet = errorSet(name, kinds).init<EntityType>(config?)
 ```
 
-The `as const` assertion on the kinds array is **required** to preserve literal types.
+The `errorSet` function uses TypeScript 5.0's `const` type parameter to automatically infer literal types from the array — no `as const` assertion required.
 
 ---
 
@@ -57,15 +57,21 @@ Creates an error set builder. Must be followed by `.init<T>()` to complete.
 ```typescript
 function errorSet<N extends string, const Kinds extends readonly string[]>(
   name: N,
-  kinds: Kinds
+  kinds: NoDuplicates<Kinds>
 ): ErrorSetBuilder<Kinds>
 ```
 
 **Parameters:**
 - `name`: String identifier for the error set (used in debugging output)
-- `kinds`: Readonly array of error kind strings (use `as const`)
+- `kinds`: Readonly array of unique error kind strings (duplicates rejected at compile time and runtime)
 
 **Returns:** `ErrorSetBuilder<Kinds>` with `.init<T>()` method
+
+**Throws:** `Error` if duplicate kinds are provided (e.g., `["a", "b", "a"]`)
+
+**Duplicate Detection:**
+- Compile-time: TypeScript's `NoDuplicates` type constraint rejects duplicate literals
+- Runtime: Throws `Error: Duplicate kind "x" in error set "Name"` for JS consumers or edge cases
 
 **Example:**
 ```typescript
@@ -73,7 +79,12 @@ import { errorSet } from "@takinprofit/errorset";
 
 type User = { id: string; name: string; email: string };
 
-const UserError = errorSet("UserError", ["not_found", "suspended", "invalid"] as const)
+// ✅ Valid - all kinds unique
+const UserError = errorSet("UserError", ["not_found", "suspended", "invalid"])
+  .init<User>();
+
+// ❌ Compile-time error - duplicate "not_found"
+const BadError = errorSet("BadError", ["not_found", "invalid", "not_found"])
   .init<User>();
 ```
 
@@ -106,10 +117,10 @@ type ErrorSetConfig = {
 **Example:**
 ```typescript
 // Basic usage
-const UserError = errorSet("UserError", ["not_found"] as const).init<User>();
+const UserError = errorSet("UserError", ["not_found"]).init<User>();
 
 // With config
-const VerboseError = errorSet("VerboseError", ["error"] as const)
+const VerboseError = errorSet("VerboseError", ["error"])
   .init<User>({
     includeStack: true,
     format: "pretty"
@@ -143,7 +154,7 @@ ErrorSet.kind`message with ${"field"} interpolation`(entity, options?)
 ```typescript
 type User = { id: string; name: string; email: string };
 
-const UserError = errorSet("UserError", ["not_found", "suspended"] as const)
+const UserError = errorSet("UserError", ["not_found", "suspended"])
   .init<User>();
 
 // Create error - only 'id' is extracted to data
@@ -338,9 +349,9 @@ merge<Kinds2 extends string, T2 extends Record<string, unknown>>(
 
 **Example:**
 ```typescript
-const UserError = errorSet("UserError", ["not_found", "suspended"] as const)
+const UserError = errorSet("UserError", ["not_found", "suspended"])
   .init<User>();
-const DbError = errorSet("DbError", ["timeout", "connection"] as const)
+const DbError = errorSet("DbError", ["timeout", "connection"])
   .init<DbContext>();
 
 const ServiceError = UserError.merge(DbError);
@@ -377,7 +388,7 @@ capture<Result>(
 **Example:**
 ```typescript
 type DbContext = { query: string; message: string };
-const DbError = errorSet("DbError", ["query_failed"] as const).init<DbContext>();
+const DbError = errorSet("DbError", ["query_failed"]).init<DbContext>();
 
 const result = DbError.capture(
   () => db.querySync(sql),
@@ -426,7 +437,7 @@ Readonly array of error kind strings.
 
 **Example:**
 ```typescript
-const UserError = errorSet("UserError", ["not_found", "suspended"] as const)
+const UserError = errorSet("UserError", ["not_found", "suspended"])
   .init<User>();
 
 console.log(UserError.kinds);  // ["not_found", "suspended"]
@@ -440,7 +451,7 @@ Type helper for exporting error set types.
 
 **Usage:**
 ```typescript
-const UserError = errorSet("UserError", ["not_found", "suspended"] as const)
+const UserError = errorSet("UserError", ["not_found", "suspended"])
   .init<User>();
 
 // Export type with same name as value
@@ -572,7 +583,7 @@ type Err<Kind extends string, Data extends Record<string, unknown>> = {
 ```typescript
 type User = { id: string; name: string };
 
-const UserError = errorSet("UserError", ["not_found", "suspended"] as const)
+const UserError = errorSet("UserError", ["not_found", "suspended"])
   .init<User>();
 export type UserError = typeof UserError.Type;
 
@@ -640,15 +651,16 @@ return { status: 200, data: result };
 
 ## Best Practices
 
-1. **Always use `as const`** on the kinds array for literal type inference
-2. **Export both value and type** using the `typeof ErrorSet.Type` pattern
-3. **Use error sets for expected failures** (user not found, validation failed)
-4. **Use `throw` for unexpected failures** (null pointers, assertion failures)
-5. **Reference only needed fields** in template literals to minimize `data` size
-6. **Use kind-level guards** when you need to handle specific error types
-7. **Use `recover`** when you need a guaranteed non-error value
-8. **Use `inspect`** for logging/metrics without changing control flow
-9. **Use `capture`/`captureAsync`** to bridge throwing code at boundaries
+1. **No `as const` required** - TypeScript 5.0's const type parameter infers literal types automatically
+2. **All kinds must be unique** - Duplicates are rejected at compile time and runtime
+3. **Export both value and type** using the `typeof ErrorSet.Type` pattern
+4. **Use error sets for expected failures** (user not found, validation failed)
+5. **Use `throw` for unexpected failures** (null pointers, assertion failures)
+6. **Reference only needed fields** in template literals to minimize `data` size
+7. **Use kind-level guards** when you need to handle specific error types
+8. **Use `recover`** when you need a guaranteed non-error value
+9. **Use `inspect`** for logging/metrics without changing control flow
+10. **Use `capture`/`captureAsync`** to bridge throwing code at boundaries
 
 ---
 
@@ -671,6 +683,8 @@ export type {
   ErrorSetBuilder,
   ErrorSetConfig,
   ErrorOptions,
+  HasDuplicates,      // Type utility for checking duplicates
+  NoDuplicates,       // Type constraint that rejects duplicates
   KindFunction,
   KindConstructor,
   KindGuard,

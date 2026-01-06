@@ -31,7 +31,7 @@ import { errorSet } from "@takinprofit/errorset";
 type User = { id: string; name: string; email: string };
 
 // Define your error set — bound to a domain type
-const UserError = errorSet("UserError", ["not_found", "suspended", "invalid"] as const)
+const UserError = errorSet("UserError", ["not_found", "suspended", "invalid"])
   .init<User>();
 export type UserError = typeof UserError.Type;
 
@@ -103,14 +103,14 @@ import { errorSet } from "@takinprofit/errorset";
 type User = { id: string; name: string; email: string };
 
 // Name and kinds first, then bind the entity type with .init<T>()
-const UserError = errorSet("UserError", ["not_found", "suspended", "invalid"] as const)
+const UserError = errorSet("UserError", ["not_found", "suspended", "invalid"])
   .init<User>();
 
 // Export a type with the same name for type-value identity
 export type UserError = typeof UserError.Type;
 ```
 
-**Important**: Use `as const` on the kinds array to preserve literal types. This ensures `result.kind` is typed as `"not_found" | "suspended" | "invalid"` rather than just `string`.
+The `errorSet` function uses TypeScript 5.0's `const` type parameter feature to automatically infer literal types from the array. This ensures `result.kind` is typed as `"not_found" | "suspended" | "invalid"` rather than just `string`.
 
 With this pattern, `UserError` works like a native class or enum — you can use it in both type and value positions:
 
@@ -127,7 +127,7 @@ if (UserError(result)) { ... }
 You can pass configuration options to `.init<T>()`:
 
 ```typescript
-const VerboseError = errorSet("VerboseError", ["error"] as const)
+const VerboseError = errorSet("VerboseError", ["error"])
   .init<User>({
     includeStack: true,
     format: "pretty"
@@ -135,6 +135,21 @@ const VerboseError = errorSet("VerboseError", ["error"] as const)
 ```
 
 Per-instance config only affects that error set — other sets continue using global config.
+
+### Duplicate Detection
+
+Error sets validate that all kinds are unique. Duplicates are caught at both compile time and runtime:
+
+```typescript
+// ❌ Compile-time error: TypeScript rejects duplicate kinds
+const BadError = errorSet("BadError", ["not_found", "invalid", "not_found"])
+  .init<User>();
+
+// ❌ Runtime error (for JS consumers or edge cases):
+// Error: Duplicate kind "not_found" in error set "BadError"
+```
+
+This prevents subtle bugs where duplicate kinds could cause property collisions or unexpected behavior.
 
 ---
 
@@ -328,8 +343,8 @@ function processCheckout(id: string): Receipt | UserError | DbError {
 Merge error sets when you need to check for errors from multiple sources:
 
 ```typescript
-const UserError = errorSet("UserError", ["not_found", "suspended"] as const).init<User>();
-const DbError = errorSet("DbError", ["timeout", "connection"] as const).init<DbContext>();
+const UserError = errorSet("UserError", ["not_found", "suspended"]).init<User>();
+const DbError = errorSet("DbError", ["timeout", "connection"]).init<DbContext>();
 
 const ServiceError = UserError.merge(DbError);
 

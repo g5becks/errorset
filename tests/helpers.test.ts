@@ -20,7 +20,7 @@ describe("recover Method", () => {
   const UserError = errorSet("UserError", [
     "not_found",
     "suspended",
-  ] as const).init<User>()
+  ]).init<User>()
 
   it("should return success value unchanged if not an error", () => {
     const user = { id: "123", name: "John" }
@@ -72,7 +72,7 @@ describe("inspect Method", () => {
   const UserError = errorSet("UserError", [
     "not_found",
     "suspended",
-  ] as const).init<User>()
+  ]).init<User>()
 
   it("should do nothing if value is not an error", () => {
     const handler = mock(() => undefined)
@@ -129,11 +129,11 @@ describe("merge Method", () => {
   const UserError = errorSet("UserError", [
     "not_found",
     "suspended",
-  ] as const).init<User>()
+  ]).init<User>()
   const OrderError = errorSet("OrderError", [
     "cancelled",
     "expired",
-  ] as const).init<Order>()
+  ]).init<Order>()
 
   it("should combine kinds from both error sets", () => {
     const ServiceError = UserError.merge(OrderError)
@@ -186,7 +186,7 @@ describe("capture Method", () => {
   const DbError = errorSet("DbError", [
     "connection",
     "query_failed",
-  ] as const).init<DbContext>()
+  ]).init<DbContext>()
 
   it("should return function result if no error thrown", () => {
     const result = DbError.capture(
@@ -243,7 +243,7 @@ describe("captureAsync Method", () => {
   const DbError = errorSet("DbError", [
     "connection",
     "query_failed",
-  ] as const).init<DbContext>()
+  ]).init<DbContext>()
 
   it("should return async function result if no error thrown", async () => {
     const result = await DbError.captureAsync(
