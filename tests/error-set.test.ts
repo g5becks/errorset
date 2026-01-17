@@ -39,7 +39,6 @@ describe("errorSet Factory", () => {
     // Runtime validation for JS consumers or edge cases where types are bypassed
     const kinds = ["not_found", "invalid", "not_found"]
     expect(() => {
-      // biome-ignore lint/suspicious/noExplicitAny: Testing runtime validation
       errorSet("BadError", kinds as any).init()
     }).toThrow('Duplicate kind "not_found" in error set "BadError"')
   })
@@ -47,7 +46,6 @@ describe("errorSet Factory", () => {
   it("should throw error for adjacent duplicate kinds", () => {
     const kinds = ["a", "a"]
     expect(() => {
-      // biome-ignore lint/suspicious/noExplicitAny: Testing runtime validation
       errorSet("BadError", kinds as any).init()
     }).toThrow('Duplicate kind "a" in error set "BadError"')
   })
