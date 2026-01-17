@@ -438,7 +438,7 @@ describe("Symbols and Coercion Edge Cases", () => {
 
     it("should handle empty data in inspect", () => {
       // Create error with minimal data (no template holes)
-      const err = TestError.error_a`Simple error`({} as Entity)
+      const err = TestError.error_a`Simple error`
       const inspectSymbol = Symbol.for("nodejs.util.inspect.custom")
       const inspectFn = (err as unknown as Record<symbol, () => string>)[
         inspectSymbol
@@ -516,7 +516,7 @@ describe("Symbols and Coercion Edge Cases", () => {
 
   describe("Symbol.hasInstance for instanceof", () => {
     it("should return true for matching errors", () => {
-      const err = TestError.error_a`Test`({} as Entity)
+      const err = TestError.error_a`Test`
       expect(err instanceof TestError).toBe(true)
     })
 
@@ -526,7 +526,7 @@ describe("Symbols and Coercion Edge Cases", () => {
 
     it("should return false for errors from different sets", () => {
       const OtherError = errorSet("OtherError", ["other"]).init<Entity>()
-      const err = OtherError.other`Test`({} as Entity)
+      const err = OtherError.other`Test`
       expect(err instanceof TestError).toBe(false)
     })
   })
@@ -650,8 +650,8 @@ describe("Tag Collisions in Merged Sets", () => {
     })
 
     it("should use kind guards for unique tags", () => {
-      const errUniqueA = SetA.unique_a`Test`({ idA: "1" })
-      const errUniqueB = SetB.unique_b`Test`({ idB: "2" })
+      const errUniqueA = SetA.unique_a`Test ${"idA"}`({ idA: "1" })
+      const errUniqueB = SetB.unique_b`Test ${"idB"}`({ idB: "2" })
 
       expect(SetA.unique_a(errUniqueA)).toBe(true)
       expect(SetA.unique_a(errUniqueB)).toBe(false)

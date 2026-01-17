@@ -75,12 +75,14 @@ export type Err<
 export function isErr(
   value: unknown
 ): value is Err<string, Record<string, unknown>> {
-  return (
-    value !== null &&
-    typeof value === "object" &&
-    ERR in value &&
-    (value as Record<typeof ERR, unknown>)[ERR] === true
-  )
+  // Support both objects and callable errors (functions with ERR symbol)
+  if (value === null) {
+    return false
+  }
+  if (typeof value !== "object" && typeof value !== "function") {
+    return false
+  }
+  return ERR in value && (value as Record<typeof ERR, unknown>)[ERR] === true
 }
 
 /**
@@ -176,16 +178,47 @@ export type ErrorCreator<
 > = (entity: Pick<T, K>, options?: ErrorOptions) => Err<Kind, Pick<T, K>>
 
 /**
+ * A callable error that is both an error value AND a function.
+ * When no template keys are present, this allows direct use as an error
+ * while still supporting optional cause via function call.
+ *
+ * @example
+ * ```ts
+ * // Use directly as error value
+ * return BackupError.config_invalid`S3 configuration required`
+ *
+ * // Or call with options to add cause
+ * return BackupError.config_invalid`S3 configuration required`({ cause: someError })
+ * ```
+ */
+export type CallableErr<Kind extends string> = Err<
+  Kind,
+  Record<string, never>
+> &
+  ((options?: ErrorOptions) => Err<Kind, Record<string, never>>)
+
+/**
  * Tagged template function for a specific error kind.
  * Constrains template holes to valid field names from the entity type.
+ *
+ * When called with no template holes, returns a CallableErr that can be
+ * used directly as an error value or called with options to add a cause.
+ *
+ * When called with template holes, returns an ErrorCreator that must be
+ * called with entity data containing the referenced fields.
  */
 export type KindConstructor<
   Kind extends string,
   T extends Record<string, unknown>,
-> = <K extends keyof T & string>(
-  strings: TemplateStringsArray,
-  ...keys: K[]
-) => ErrorCreator<Kind, T, K>
+> = {
+  // Overload for no template holes - returns CallableErr
+  (strings: TemplateStringsArray): CallableErr<Kind>
+  // Overload for template holes - returns ErrorCreator
+  <K extends keyof T & string>(
+    strings: TemplateStringsArray,
+    ...keys: K[]
+  ): ErrorCreator<Kind, T, K>
+}
 
 /**
  * Kind-level guard function type.
@@ -281,7 +314,7 @@ export function createKindFunction<
   const kindFn = <K extends keyof T & string>(
     stringsOrValue: TemplateStringsArray | object | null | undefined,
     ...keys: K[]
-  ): ErrorCreator<Kind, T, K> | boolean => {
+  ): ErrorCreator<Kind, T, K> | CallableErr<Kind> | boolean => {
     // Check if called as tagged template literal
     // TemplateStringsArray is an array with a 'raw' property
     if (
@@ -291,7 +324,71 @@ export function createKindFunction<
     ) {
       const strings = stringsOrValue as TemplateStringsArray
 
-      // Return error creator function
+      // When no template keys, return a CallableErr directly
+      // This allows: BackupError.config_invalid`S3 config required`
+      // Instead of: BackupError.config_invalid`S3 config required`({})
+      if (keys.length === 0) {
+        const message = strings.join("")
+        const data = {} as Record<string, never>
+
+        // Create callable error function
+        const callableErr = (options?: ErrorOptions) => {
+          const newErr = {
+            [ERR]: true,
+            kind,
+            message,
+            data,
+            ...(options?.cause !== undefined && { cause: options.cause }),
+            [INSPECT]() {
+              return `${name}.${kind} ${JSON.stringify(data)}`
+            },
+          } as Err<Kind, Record<string, never>>
+
+          captureStack(newErr, callableErr, instanceConfig)
+          return newErr
+        }
+
+        // Attach error properties to the function itself
+        Object.defineProperty(callableErr, ERR, {
+          value: true,
+          writable: false,
+          enumerable: true,
+          configurable: false,
+        })
+        Object.defineProperty(callableErr, "kind", {
+          value: kind,
+          writable: false,
+          enumerable: true,
+          configurable: false,
+        })
+        Object.defineProperty(callableErr, "message", {
+          value: message,
+          writable: false,
+          enumerable: true,
+          configurable: false,
+        })
+        Object.defineProperty(callableErr, "data", {
+          value: data,
+          writable: false,
+          enumerable: true,
+          configurable: false,
+        })
+        Object.defineProperty(callableErr, INSPECT, {
+          value() {
+            return `${name}.${kind} ${JSON.stringify(data)}`
+          },
+          writable: false,
+          enumerable: false,
+          configurable: false,
+        })
+
+        // Capture stack trace on the callable error itself
+        captureStack(callableErr, kindFn, instanceConfig)
+
+        return callableErr as unknown as CallableErr<Kind>
+      }
+
+      // Return error creator function for template with keys
       const creator = (
         entity: Pick<T, K>,
         options?: ErrorOptions
@@ -336,7 +433,11 @@ export function createKindFunction<
 
     // Called as guard - check if value is this specific error kind
     const value = stringsOrValue
-    if (value === null || typeof value !== "object") {
+    // Support both objects and callable errors (functions)
+    if (
+      value === null ||
+      (typeof value !== "object" && typeof value !== "function")
+    ) {
       return false
     }
 
@@ -408,8 +509,11 @@ export function createSetGuard<
   T extends Record<string, unknown>,
 >(kinds: Kinds[]): SetGuard<Kinds, T> {
   const guard = (value: unknown): value is Err<Kinds, Partial<T>> => {
-    // Must be a non-null object
-    if (value === null || typeof value !== "object") {
+    // Support both objects and callable errors (functions)
+    if (
+      value === null ||
+      (typeof value !== "object" && typeof value !== "function")
+    ) {
       return false
     }
 

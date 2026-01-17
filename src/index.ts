@@ -19,6 +19,7 @@ export {
 } from "./config.ts"
 // Core types and constants
 export {
+  type CallableErr,
   captureAsync,
   captureSync,
   createKindFunction,

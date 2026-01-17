@@ -135,29 +135,46 @@ Each error kind becomes a tagged template literal function on the error set.
 
 **Signature:**
 ```typescript
+// With template holes - returns ErrorCreator requiring entity data
 ErrorSet.kind`message with ${"field"} interpolation`(entity, options?)
+
+// Without template holes - returns CallableErr (usable directly)
+ErrorSet.kind`message without holes`
+ErrorSet.kind`message without holes`(options?)  // optional call for cause
 ```
 
 **Parameters:**
-- Template string with `${"fieldName"}` placeholders
-- `entity`: Object containing values for referenced fields (must include all referenced fields)
-- `options`: Optional `{ cause?: Err }` for error chaining
+- Template string with optional `${"fieldName"}` placeholders
+- When holes present: `entity` object with values for referenced fields, plus optional `options`
+- When no holes: Optional `options` with `{ cause?: Err }` for error chaining
 
 **Template Holes:**
 - Must be string literals matching `keyof T`
 - Only referenced fields are extracted into `err.data`
 - TypeScript enforces valid field names at compile time
 
-**Returns:** `Err<Kind, Pick<T, ReferencedFields>>`
+**Returns:** 
+- With holes: `Err<Kind, Pick<T, ReferencedFields>>`
+- Without holes: `CallableErr<Kind>` - both an error value AND a function
 
 **Example:**
 ```typescript
 type User = { id: string; name: string; email: string };
 
-const UserError = errorSet("UserError", ["not_found", "suspended"])
+const UserError = errorSet("UserError", ["not_found", "suspended", "invalid"])
   .init<User>();
 
-// Create error - only 'id' is extracted to data
+// NO TEMPLATE HOLES - Simplified syntax (no empty call needed)
+const err0 = UserError.invalid`Invalid user data`;
+// err0.kind === "invalid"
+// err0.message === "Invalid user data"
+// err0.data === {}
+// err0 is both an error AND callable
+
+// NO HOLES with cause - call with options
+const err0b = UserError.invalid`Invalid user data`({ cause: someError });
+
+// WITH TEMPLATE HOLES - requires entity data
 const err1 = UserError.not_found`User ${"id"} not found`({ id: "123" });
 // err1.kind === "not_found"
 // err1.message === "User 123 not found"
@@ -678,6 +695,7 @@ export { isErr } from "@takinprofit/errorset";
 
 // Types
 export type {
+  CallableErr,        // Error type for no-context errors (callable function with error properties)
   Err,
   ErrorSet,
   ErrorSetBuilder,

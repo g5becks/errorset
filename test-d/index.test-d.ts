@@ -198,7 +198,7 @@ expectAssignable<readonly string[]>(ServiceError.kinds)
 // Sync capture
 const capturedSync = UserError.capture(
   () => "success" as const,
-  () => UserError.invalid`Error`({} as User)
+  () => UserError.invalid`Error`
 )
 
 expectAssignable<"success" | Err<string, Partial<User>>>(capturedSync)
@@ -206,7 +206,7 @@ expectAssignable<"success" | Err<string, Partial<User>>>(capturedSync)
 // Async capture
 const capturedAsync = UserError.captureAsync(
   async () => "success" as const,
-  () => UserError.invalid`Error`({} as User)
+  () => UserError.invalid`Error`
 )
 
 expectAssignable<Promise<"success" | Err<string, Partial<User>>>>(capturedAsync)
@@ -324,3 +324,38 @@ errorSet("BadError3", ["x", "x"])
 
 // @ts-expect-error - duplicates at different positions should fail
 errorSet("BadError4", ["a", "b", "c", "b"])
+
+// =============================================================================
+// CallableErr - Simplified syntax for no-context errors
+// =============================================================================
+
+// No template holes should return CallableErr (usable directly)
+const callableErr = UserError.invalid`Simple error message`
+
+// CallableErr should be assignable to Err
+expectAssignable<Err<"invalid", Record<string, never>>>(callableErr)
+
+// CallableErr should be callable with options
+const withCause = callableErr({
+  cause: UserError.not_found`Cause ${"id"}`({ id: "1" }),
+})
+expectAssignable<Err<"invalid", Record<string, never>>>(withCause)
+
+// CallableErr should have error properties
+expectType<"invalid">(callableErr.kind)
+expectType<string>(callableErr.message)
+expectType<Record<string, never>>(callableErr.data)
+
+// isErr should work on CallableErr
+expectType<boolean>(isErr(callableErr))
+
+// Set-level guard should work on CallableErr
+expectType<boolean>(UserError(callableErr))
+
+// Kind-level guard should work on CallableErr
+expectType<boolean>(UserError.invalid(callableErr))
+
+// With template holes should still return ErrorCreator (requires entity data)
+const withHoles = UserError.not_found`User ${"id"} not found`({ id: "123" })
+expectType<"not_found">(withHoles.kind)
+expectType<{ id: string }>(withHoles.data)

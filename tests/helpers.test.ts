@@ -191,11 +191,7 @@ describe("capture Method", () => {
   it("should return function result if no error thrown", () => {
     const result = DbError.capture(
       () => 42,
-      () =>
-        DbError.query_failed`Query failed`({
-          query: "SELECT",
-          message: "error",
-        })
+      () => DbError.query_failed`Query failed`
     )
     expect(result).toBe(42)
   })
@@ -251,11 +247,7 @@ describe("captureAsync Method", () => {
         await Promise.resolve()
         return 42
       },
-      () =>
-        DbError.query_failed`Query failed`({
-          query: "SELECT",
-          message: "error",
-        })
+      () => DbError.query_failed`Query failed`
     )
     expect(result).toBe(42)
   })
