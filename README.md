@@ -518,9 +518,25 @@ configure(
 The same options can be passed per set to `.init<T>(config)`; per-set values override the
 global ones. When `includeTimestamp` is off, errors have no `timestamp` property at all.
 
-> **Deprecated:** `format` and `colors` are still accepted but have no effect, and they are
-> removed in 0.4.0. Format errors in your logger instead, using `JSON.stringify(err)` or
-> `String(err)` (see [Serialization and Logging](#serialization-and-logging)).
+**`configure()` is for applications.** It changes the defaults of every error set in the
+process, including sets defined by libraries you depend on. If you publish a library, pass
+options to your own sets with `.init<T>(config)` and never call `configure()`.
+
+`configure()` returns a function that restores the previous configuration, which keeps tests
+isolated:
+
+```typescript
+const restore = configure({ includeTimestamp: true });
+try {
+  // ...
+} finally {
+  restore();
+}
+```
+
+Formatting is your logger's job: use `JSON.stringify(err)` or `String(err)` (see
+[Serialization and Logging](#serialization-and-logging)). The `format` and `colors` options,
+which never had an effect, were removed in 0.4.0.
 
 Stack traces are disabled by default because error sets represent *expected* failures, not bugs. Enable them during development if you need to trace where errors originate.
 

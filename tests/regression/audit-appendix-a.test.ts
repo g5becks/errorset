@@ -235,7 +235,7 @@ describe("A11 no-op configuration", () => {
     expect(typeof E.boom`id ${"id"}`({ id: "1" }).timestamp).toBe("number")
   })
 
-  test.failing("A11 [TASK-059] the no-op format and colors options no longer exist", () => {
+  test("A11 [TASK-059] the no-op format and colors options no longer exist", () => {
     const config = getConfig() as Record<string, unknown>
     expect("format" in config).toBe(false)
     expect("colors" in config).toBe(false)

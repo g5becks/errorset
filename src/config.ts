@@ -4,28 +4,13 @@
  */
 
 /**
- * Values accepted by the `format` option.
- *
- * @deprecated No effect: errorset never reads this option. It is removed in 0.4.0; format errors in your logger instead (`JSON.stringify(err)`, `String(err)`).
- */
-export type Format = "pretty" | "json" | "minimal"
-
-/**
  * Configuration options for the errorset library.
  */
 export type Config = {
-  /**
-   * @deprecated No effect: errorset never reads this option. It is removed in 0.4.0; format errors in your logger instead (`JSON.stringify(err)`, `String(err)`).
-   */
-  format: Format
   /** Include stack traces in errors (V8 engines only) */
   includeStack: boolean
   /** Set `timestamp` (`Date.now()`) on each error at creation; absent when false */
   includeTimestamp: boolean
-  /**
-   * @deprecated No effect: errorset never reads this option. It is removed in 0.4.0; format errors in your logger instead (`JSON.stringify(err)`, `String(err)`).
-   */
-  colors: boolean
   /** Maximum stack trace depth when includeStack is true */
   stackDepth: number
 }
@@ -35,21 +20,41 @@ export type Config = {
  * Stack traces and timestamps are off by default since error sets
  * are for expected failures, not bugs.
  */
-const defaultConfig: Config = {
-  format: "pretty",
+const defaultConfig: Readonly<Config> = {
   includeStack: false,
   includeTimestamp: false,
-  colors: true,
   stackDepth: 10,
 }
+
+/** The option names errorset reads; anything else passed to configure() is ignored. */
+const CONFIG_KEYS = Object.keys(defaultConfig) as (keyof Config)[]
 
 /** Global configuration state */
 let currentConfig: Config = { ...defaultConfig }
 
+/** Copies only the known options, so stray keys (e.g. the removed format/colors) are ignored. */
+const pickKnownOptions = (options: Partial<Config>): Partial<Config> => {
+  const known: Partial<Config> = {}
+  for (const key of CONFIG_KEYS) {
+    if (options[key] !== undefined) {
+      Object.assign(known, { [key]: options[key] })
+    }
+  }
+  return known
+}
+
 /**
- * Configure the errorset library behavior.
+ * Configure errorset globally for the whole process.
+ *
+ * Global configuration is for **applications** only: it affects every error set in
+ * the process, including sets defined by libraries. Library authors should pass
+ * options to their own sets with `errorSet(name, kinds).init<T>(config)` instead.
+ *
+ * Unknown options are ignored. Returns a disposer that restores the configuration
+ * that was in effect before this call (useful in tests).
  *
  * @param options - Partial configuration to merge with current settings
+ * @returns A function that restores the previous configuration
  *
  * @example
  * ```ts
@@ -58,10 +63,19 @@ let currentConfig: Config = { ...defaultConfig }
  *
  * // Production: record when each error was created
  * configure({ includeTimestamp: true })
+ *
+ * // Tests: scope a change and undo it
+ * const restore = configure({ includeTimestamp: true })
+ * // ...
+ * restore()
  * ```
  */
-export function configure(options: Partial<Config>): void {
-  currentConfig = { ...currentConfig, ...options }
+export function configure(options: Partial<Config>): () => void {
+  const previous = currentConfig
+  currentConfig = { ...currentConfig, ...pickKnownOptions(options) }
+  return () => {
+    currentConfig = previous
+  }
 }
 
 /**

@@ -1,10 +1,10 @@
 /**
- * includeTimestamp (audit A11) and the deprecated no-op format/colors options.
+ * includeTimestamp (audit A11).
  * @module tests/timestamp
  */
 
 import { afterEach, describe, expect, it } from "bun:test"
-import { configure, errorSet, getConfig, resetConfig } from "../src/index.ts"
+import { configure, errorSet, resetConfig } from "../src/index.ts"
 
 type User = { id: string }
 
@@ -72,20 +72,5 @@ describe("includeTimestamp", () => {
     expect(JSON.parse(JSON.stringify(callable)).timestamp).toBe(
       callable.timestamp
     )
-  })
-})
-
-describe("deprecated format and colors", () => {
-  it("are still accepted by configure() and have no effect on errors", () => {
-    expect(() => configure({ format: "json", colors: false })).not.toThrow()
-    expect(getConfig().format).toBe("json")
-    const err = makeSet().not_found`User ${"id"} not found`({ id: "1" })
-    expect(String(err)).toBe("UserError.not_found: User 1 not found")
-    expect(JSON.parse(JSON.stringify(err))).toEqual({
-      set: "UserError",
-      kind: "not_found",
-      message: "User 1 not found",
-      data: { id: "1" },
-    })
   })
 })

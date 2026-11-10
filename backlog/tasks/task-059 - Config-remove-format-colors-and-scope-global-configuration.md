@@ -1,9 +1,11 @@
 ---
 id: TASK-059
 title: 'Config: remove format/colors and scope global configuration'
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@claude'
 created_date: '2026-11-10T17:35:00Z'
+updated_date: '2026-11-10T20:54:00Z'
 labels:
   - config
   - breaking
@@ -36,3 +38,12 @@ type: chore
 - [ ] #3 CHANGELOG.md lists the change under ## [Unreleased] > ### Breaking changes with migration steps
 - [ ] #4 bash scripts/ci-local.sh HEAD prints RESULT: PASS
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. config.ts: remove Format, format and colors (types and defaults); configure() keeps only known options (includeStack, includeTimestamp, stackDepth), so stray format/colors are ignored at runtime, and returns a disposer restoring the previous config; keep resetConfig().
+2. index.ts: drop the Format export. Per-set init(config) types lose format/colors too.
+3. Tests: flip A11; migrate config tests that exercised format/colors to the new contract (type error via @ts-expect-error + ignored at runtime); disposer tests (restore, nested, idempotent).
+4. Docs: configure() is application-only (libraries use init(config)); only working options. CHANGELOG breaking; gate; ci-local.
+<!-- SECTION:PLAN:END -->

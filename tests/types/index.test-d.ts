@@ -77,7 +77,7 @@ expectTypeOf(OrderError.kinds).toExtend<readonly string[]>()
 // Builder API with config
 const VerboseError = errorSet("VerboseError", ["error"]).init<User>({
   includeStack: true,
-  format: "pretty",
+  includeTimestamp: true,
 })
 
 expectTypeOf(VerboseError({} as unknown)).toEqualTypeOf<boolean>()
@@ -225,7 +225,6 @@ expectTypeOf(capturedAsync).toExtend<
 
 const config: ErrorSetConfig = {
   includeStack: true,
-  format: "json",
   stackDepth: 10,
 }
 
@@ -235,14 +234,18 @@ expectTypeOf(config).toExtend<Partial<Config>>()
 // configure function
 // =============================================================================
 
-// configure should accept partial config
-configure({ format: "json" })
+// configure accepts partial config and returns a disposer
 configure({ includeStack: true, stackDepth: 5 })
-configure({ format: "pretty", colors: true })
+const restoreConfig = configure({ includeTimestamp: true })
+expectTypeOf(restoreConfig).toEqualTypeOf<() => void>()
 
-// Invalid format should error
-// @ts-expect-error - 'invalid' is not a valid format
-configure({ format: "invalid" })
+// format and colors were removed in 0.4.0
+// @ts-expect-error - format no longer exists
+configure({ format: "json" })
+// @ts-expect-error - colors no longer exists
+configure({ colors: true })
+// @ts-expect-error - format no longer exists in per-set config either
+errorSet("RemovedFormat", ["a"]).init({ format: "pretty" })
 
 // =============================================================================
 // Iteration support

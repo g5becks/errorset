@@ -116,10 +116,6 @@ type ErrorSetConfig = {
   includeStack?: boolean;      // stack trace on each error (V8 engines only)
   stackDepth?: number;         // max stack depth when includeStack is on
   includeTimestamp?: boolean;  // err.timestamp = Date.now(); absent when off
-  /** @deprecated no effect; removed in 0.4.0 */
-  format?: "pretty" | "json" | "minimal";
-  /** @deprecated no effect; removed in 0.4.0 */
-  colors?: boolean;
 }
 ```
 
@@ -530,7 +526,7 @@ Sets global configuration for all error sets.
 
 **Signature:**
 ```typescript
-function configure(options: Partial<Config>): void
+function configure(options: Partial<Config>): () => void  // returns a disposer restoring the previous config; unknown options are ignored
 ```
 
 **Options:**
@@ -539,10 +535,6 @@ type Config = {
   includeStack: boolean;      // Default: false (V8 engines only)
   stackDepth: number;         // Default: 10
   includeTimestamp: boolean;  // Default: false; sets err.timestamp = Date.now(), absent when false
-  /** @deprecated no effect; removed in 0.4.0. Format errors in your logger. */
-  format: "pretty" | "json" | "minimal";  // Default: "pretty"
-  /** @deprecated no effect; removed in 0.4.0. */
-  colors: boolean;                         // Default: true
 }
 ```
 

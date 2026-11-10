@@ -13,7 +13,6 @@
 export {
   type Config,
   configure,
-  type Format,
   getConfig,
   resetConfig,
 } from "./config.ts"
