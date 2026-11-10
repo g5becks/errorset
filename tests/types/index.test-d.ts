@@ -1,9 +1,9 @@
 /**
- * Type tests for errorset library using tsd.
+ * Type tests for errorset (expect-type), checked by the project's tsc.
  * These tests verify that TypeScript type inference works correctly.
  */
 
-import { expectAssignable, expectType } from "tsd"
+import { expectTypeOf } from "expect-type"
 import {
   type Config,
   configure,
@@ -14,7 +14,7 @@ import {
   isErr,
   type KindFunction,
   type NoDuplicates,
-} from "../dist/index.js"
+} from "../../src/index.ts"
 
 // =============================================================================
 // Domain types for testing
@@ -43,22 +43,22 @@ const UserError = errorSet("UserError", [
 ]).init<User>()
 
 // The error set should be callable (set-level guard)
-expectType<boolean>(UserError({} as unknown))
+expectTypeOf(UserError({} as unknown)).toEqualTypeOf<boolean>()
 
 // The error set should have kinds array
-expectAssignable<readonly string[]>(UserError.kinds)
+expectTypeOf(UserError.kinds).toExtend<readonly string[]>()
 
 // The error set should have helper methods
 // biome-ignore lint/complexity/noBannedTypes: Testing that these are functions
-expectAssignable<Function>(UserError.recover)
+expectTypeOf(UserError.recover).toExtend<Function>()
 // biome-ignore lint/complexity/noBannedTypes: Testing that these are functions
-expectAssignable<Function>(UserError.inspect)
+expectTypeOf(UserError.inspect).toExtend<Function>()
 // biome-ignore lint/complexity/noBannedTypes: Testing that these are functions
-expectAssignable<Function>(UserError.merge)
+expectTypeOf(UserError.merge).toExtend<Function>()
 // biome-ignore lint/complexity/noBannedTypes: Testing that these are functions
-expectAssignable<Function>(UserError.capture)
+expectTypeOf(UserError.capture).toExtend<Function>()
 // biome-ignore lint/complexity/noBannedTypes: Testing that these are functions
-expectAssignable<Function>(UserError.captureAsync)
+expectTypeOf(UserError.captureAsync).toExtend<Function>()
 
 // =============================================================================
 // errorSet creation - builder API with config
@@ -71,8 +71,8 @@ const OrderError = errorSet("OrderError", [
 ]).init<Order>()
 
 // Should produce same shape
-expectType<boolean>(OrderError({} as unknown))
-expectAssignable<readonly string[]>(OrderError.kinds)
+expectTypeOf(OrderError({} as unknown)).toEqualTypeOf<boolean>()
+expectTypeOf(OrderError.kinds).toExtend<readonly string[]>()
 
 // Builder API with config
 const VerboseError = errorSet("VerboseError", ["error"]).init<User>({
@@ -80,7 +80,7 @@ const VerboseError = errorSet("VerboseError", ["error"]).init<User>({
   format: "pretty",
 })
 
-expectType<boolean>(VerboseError({} as unknown))
+expectTypeOf(VerboseError({} as unknown)).toEqualTypeOf<boolean>()
 
 // =============================================================================
 // Kind function access and error creation
@@ -88,17 +88,21 @@ expectType<boolean>(VerboseError({} as unknown))
 
 // Access kind function directly (static property)
 const notFoundFn = UserError.not_found
-expectAssignable<KindFunction<"not_found", User>>(notFoundFn)
+expectTypeOf(notFoundFn).toExtend<KindFunction<"not_found", User>>()
 
 // Create error using kind function
 const user: User = { id: "123", name: "John", email: "john@example.com" }
 
 // Template literal creates an error
 const err = UserError.not_found`User ${"id"} not found`(user)
-expectAssignable<Err<"not_found", { id: string }>>(err)
-expectType<"not_found">(err.kind)
-expectType<string>(err.message)
-expectAssignable<{ id: string }>(err.data)
+expectTypeOf(err).toExtend<Err<"not_found", { id: string }>>()
+
+// Template holes must be keys of the entity type
+// @ts-expect-error - "nope" is not a key of User
+expectTypeOf(UserError.not_found`User ${"nope"} not found`).toBeFunction()
+expectTypeOf(err.kind).toEqualTypeOf<"not_found">()
+expectTypeOf(err.message).toEqualTypeOf<string>()
+expectTypeOf(err.data).toExtend<{ id: string }>()
 
 // =============================================================================
 // Err type structure
@@ -107,12 +111,12 @@ expectAssignable<{ id: string }>(err.data)
 // Create a mock error to test the Err type
 declare const mockErr: Err<"not_found", { id: string }>
 
-expectType<"not_found">(mockErr.kind)
-expectType<string>(mockErr.message)
-expectType<{ id: string }>(mockErr.data)
-expectAssignable<Err<string, Record<string, unknown>> | undefined>(
-  mockErr.cause
-)
+expectTypeOf(mockErr.kind).toEqualTypeOf<"not_found">()
+expectTypeOf(mockErr.message).toEqualTypeOf<string>()
+expectTypeOf(mockErr.data).toEqualTypeOf<{ id: string }>()
+expectTypeOf(mockErr.cause).toExtend<
+  Err<string, Record<string, unknown>> | undefined
+>()
 
 // =============================================================================
 // isErr universal guard
@@ -121,9 +125,9 @@ expectAssignable<Err<string, Record<string, unknown>> | undefined>(
 declare const unknownValue: unknown
 
 if (isErr(unknownValue)) {
-  expectType<string>(unknownValue.kind)
-  expectType<string>(unknownValue.message)
-  expectAssignable<Record<string, unknown>>(unknownValue.data)
+  expectTypeOf(unknownValue.kind).toEqualTypeOf<string>()
+  expectTypeOf(unknownValue.message).toEqualTypeOf<string>()
+  expectTypeOf(unknownValue.data).toExtend<Record<string, unknown>>()
 }
 
 // =============================================================================
@@ -135,9 +139,9 @@ declare const userResult: GetUserResult
 
 if (UserError(userResult)) {
   // After guard, should be an error
-  expectAssignable<string>(userResult.kind)
-  expectType<string>(userResult.message)
-  expectAssignable<Partial<User>>(userResult.data)
+  expectTypeOf(userResult.kind).toExtend<string>()
+  expectTypeOf(userResult.message).toEqualTypeOf<string>()
+  expectTypeOf(userResult.data).toExtend<Partial<User>>()
 }
 
 // =============================================================================
@@ -158,7 +162,7 @@ const recovered = UserError.recover(userResult, {
     ({ id: "invalid", name: "Invalid", email: "invalid@example.com" }) as User,
 })
 
-expectAssignable<User>(recovered)
+expectTypeOf(recovered).toExtend<User>()
 
 // Catch-all handler
 const recoveredWithCatchAll = UserError.recover(userResult, {
@@ -166,18 +170,18 @@ const recoveredWithCatchAll = UserError.recover(userResult, {
     ({ id: "default", name: "Default", email: "default@example.com" }) as User,
 })
 
-expectAssignable<User>(recoveredWithCatchAll)
+expectTypeOf(recoveredWithCatchAll).toExtend<User>()
 
 // =============================================================================
 // inspect helper
 // =============================================================================
 
 // inspect should return void
-expectType<void>(
+expectTypeOf(
   UserError.inspect(userResult, {
     not_found: e => console.log(e.data),
   })
-)
+).toEqualTypeOf<void>()
 
 // =============================================================================
 // merge helper
@@ -186,10 +190,10 @@ expectType<void>(
 const ServiceError = UserError.merge(OrderError)
 
 // Merged guard should work
-expectType<boolean>(ServiceError({} as unknown))
+expectTypeOf(ServiceError({} as unknown)).toEqualTypeOf<boolean>()
 
 // Merged set has kinds
-expectAssignable<readonly string[]>(ServiceError.kinds)
+expectTypeOf(ServiceError.kinds).toExtend<readonly string[]>()
 
 // =============================================================================
 // capture and captureAsync
@@ -201,7 +205,7 @@ const capturedSync = UserError.capture(
   () => UserError.invalid`Error`
 )
 
-expectAssignable<"success" | Err<string, Partial<User>>>(capturedSync)
+expectTypeOf(capturedSync).toExtend<"success" | Err<string, Partial<User>>>()
 
 // Async capture
 const capturedAsync = UserError.captureAsync(
@@ -209,7 +213,9 @@ const capturedAsync = UserError.captureAsync(
   () => UserError.invalid`Error`
 )
 
-expectAssignable<Promise<"success" | Err<string, Partial<User>>>>(capturedAsync)
+expectTypeOf(capturedAsync).toExtend<
+  Promise<"success" | Err<string, Partial<User>>>
+>()
 
 // =============================================================================
 // ErrorSetConfig type
@@ -221,7 +227,7 @@ const config: ErrorSetConfig = {
   stackDepth: 10,
 }
 
-expectAssignable<Partial<Config>>(config)
+expectTypeOf(config).toExtend<Partial<Config>>()
 
 // =============================================================================
 // configure function
@@ -242,11 +248,11 @@ configure({ format: "invalid" })
 
 // Error sets should be iterable
 const kinds: string[] = [...UserError]
-expectType<string[]>(kinds)
+expectTypeOf(kinds).toEqualTypeOf<string[]>()
 
 // Should work with for...of (type should be string)
 for (const kind of UserError) {
-  expectType<string>(kind)
+  expectTypeOf(kind).toEqualTypeOf<string>()
 }
 
 // =============================================================================
@@ -254,46 +260,52 @@ for (const kind of UserError) {
 // =============================================================================
 
 // UserError.Type should be defined
-expectAssignable<Err<string, Partial<User>> | undefined>(UserError.Type)
+expectTypeOf(UserError.Type).toExtend<Err<string, Partial<User>> | undefined>()
 
 // =============================================================================
 // instanceof support (Symbol.hasInstance)
 // =============================================================================
 
 // instanceof check should work (returns boolean)
-expectType<boolean>(userResult instanceof UserError)
+expectTypeOf(userResult instanceof UserError).toEqualTypeOf<boolean>()
 
 // =============================================================================
 // HasDuplicates type utility
 // =============================================================================
 
 // No duplicates should return false
-expectType<false>({} as HasDuplicates<["a", "b", "c"]>)
-expectType<false>({} as HasDuplicates<["not_found", "suspended", "invalid"]>)
-expectType<false>({} as HasDuplicates<["x"]>)
-expectType<false>({} as HasDuplicates<[]>)
+expectTypeOf({} as HasDuplicates<["a", "b", "c"]>).toEqualTypeOf<false>()
+expectTypeOf(
+  {} as HasDuplicates<["not_found", "suspended", "invalid"]>
+).toEqualTypeOf<false>()
+expectTypeOf({} as HasDuplicates<["x"]>).toEqualTypeOf<false>()
+expectTypeOf({} as HasDuplicates<[]>).toEqualTypeOf<false>()
 
 // Duplicates should return true
-expectType<true>({} as HasDuplicates<["a", "b", "a"]>)
-expectType<true>({} as HasDuplicates<["a", "a"]>)
-expectType<true>({} as HasDuplicates<["not_found", "suspended", "not_found"]>)
-expectType<true>({} as HasDuplicates<["x", "y", "z", "x"]>)
+expectTypeOf({} as HasDuplicates<["a", "b", "a"]>).toEqualTypeOf<true>()
+expectTypeOf({} as HasDuplicates<["a", "a"]>).toEqualTypeOf<true>()
+expectTypeOf(
+  {} as HasDuplicates<["not_found", "suspended", "not_found"]>
+).toEqualTypeOf<true>()
+expectTypeOf({} as HasDuplicates<["x", "y", "z", "x"]>).toEqualTypeOf<true>()
 
 // =============================================================================
 // NoDuplicates type utility
 // =============================================================================
 
 // No duplicates should return the original tuple type
-expectType<["a", "b", "c"]>({} as NoDuplicates<["a", "b", "c"]>)
-expectType<["not_found", "suspended"]>(
-  {} as NoDuplicates<["not_found", "suspended"]>
-)
-expectType<[]>({} as NoDuplicates<[]>)
+expectTypeOf({} as NoDuplicates<["a", "b", "c"]>).toEqualTypeOf<
+  ["a", "b", "c"]
+>()
+expectTypeOf({} as NoDuplicates<["not_found", "suspended"]>).toEqualTypeOf<
+  ["not_found", "suspended"]
+>()
+expectTypeOf({} as NoDuplicates<[]>).toEqualTypeOf<[]>()
 
 // Duplicates should return never
-expectType<never>({} as NoDuplicates<["a", "b", "a"]>)
-expectType<never>({} as NoDuplicates<["a", "a"]>)
-expectType<never>({} as NoDuplicates<["x", "y", "x", "z"]>)
+expectTypeOf({} as NoDuplicates<["a", "b", "a"]>).toEqualTypeOf<never>()
+expectTypeOf({} as NoDuplicates<["a", "a"]>).toEqualTypeOf<never>()
+expectTypeOf({} as NoDuplicates<["x", "y", "x", "z"]>).toEqualTypeOf<never>()
 
 // =============================================================================
 // Duplicate detection in errorSet - compile-time errors
@@ -308,9 +320,9 @@ const ValidError3 = errorSet("ValidError3", [
   "info",
 ]).init<User>()
 
-expectType<boolean>(ValidError1({} as unknown))
-expectType<boolean>(ValidError2({} as unknown))
-expectType<boolean>(ValidError3({} as unknown))
+expectTypeOf(ValidError1({} as unknown)).toEqualTypeOf<boolean>()
+expectTypeOf(ValidError2({} as unknown)).toEqualTypeOf<boolean>()
+expectTypeOf(ValidError3({} as unknown)).toEqualTypeOf<boolean>()
 
 // Duplicate kinds should cause a compile-time error
 // @ts-expect-error - duplicate kind "a" should fail NoDuplicates constraint
@@ -333,29 +345,29 @@ errorSet("BadError4", ["a", "b", "c", "b"])
 const callableErr = UserError.invalid`Simple error message`
 
 // CallableErr should be assignable to Err
-expectAssignable<Err<"invalid", Record<string, never>>>(callableErr)
+expectTypeOf(callableErr).toExtend<Err<"invalid", Record<string, never>>>()
 
 // CallableErr should be callable with options
 const withCause = callableErr({
   cause: UserError.not_found`Cause ${"id"}`({ id: "1" }),
 })
-expectAssignable<Err<"invalid", Record<string, never>>>(withCause)
+expectTypeOf(withCause).toExtend<Err<"invalid", Record<string, never>>>()
 
 // CallableErr should have error properties
-expectType<"invalid">(callableErr.kind)
-expectType<string>(callableErr.message)
-expectType<Record<string, never>>(callableErr.data)
+expectTypeOf(callableErr.kind).toEqualTypeOf<"invalid">()
+expectTypeOf(callableErr.message).toEqualTypeOf<string>()
+expectTypeOf(callableErr.data).toEqualTypeOf<Record<string, never>>()
 
 // isErr should work on CallableErr
-expectType<boolean>(isErr(callableErr))
+expectTypeOf(isErr(callableErr)).toEqualTypeOf<boolean>()
 
 // Set-level guard should work on CallableErr
-expectType<boolean>(UserError(callableErr))
+expectTypeOf(UserError(callableErr)).toEqualTypeOf<boolean>()
 
 // Kind-level guard should work on CallableErr
-expectType<boolean>(UserError.invalid(callableErr))
+expectTypeOf(UserError.invalid(callableErr)).toEqualTypeOf<boolean>()
 
 // With template holes should still return ErrorCreator (requires entity data)
 const withHoles = UserError.not_found`User ${"id"} not found`({ id: "123" })
-expectType<"not_found">(withHoles.kind)
-expectType<{ id: string }>(withHoles.data)
+expectTypeOf(withHoles.kind).toEqualTypeOf<"not_found">()
+expectTypeOf(withHoles.data).toEqualTypeOf<{ id: string }>()

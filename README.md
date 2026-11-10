@@ -130,7 +130,7 @@ You can pass configuration options to `.init<T>()`:
 const VerboseError = errorSet("VerboseError", ["error"])
   .init<User>({
     includeStack: true,
-    format: "pretty"
+    includeTimestamp: true
   });
 ```
 
@@ -430,20 +430,25 @@ const result = await DbError.captureAsync(
 import { configure } from "@takinprofit/errorset";
 
 configure({
-  format: "pretty" | "json" | "minimal",
-  includeStack: boolean,     // Stack traces (V8 only, off by default)
-  includeTimestamp: boolean, // Timestamps (off by default)
-  colors: boolean,           // ANSI colors in pretty format
-  stackDepth: number,        // Max stack trace depth
+  includeStack: boolean,     // Stack traces (V8 engines only, off by default)
+  stackDepth: number,        // Max stack trace depth when includeStack is on (default 10)
+  includeTimestamp: boolean, // Set err.timestamp = Date.now() at creation (off by default)
 });
 
 // Environment-based configuration
 configure(
   process.env.NODE_ENV === "development"
-    ? { format: "pretty", colors: true, includeStack: true }
-    : { format: "json", includeTimestamp: true }
+    ? { includeStack: true }
+    : { includeTimestamp: true }
 );
 ```
+
+The same options can be passed per set to `.init<T>(config)`; per-set values override the
+global ones. When `includeTimestamp` is off, errors have no `timestamp` property at all.
+
+> **Deprecated:** `format` and `colors` are still accepted but have no effect, and they are
+> removed in 0.4.0. Format errors in your logger instead, using `JSON.stringify(err)` or
+> `String(err)` (see [Serialization and Logging](#serialization-and-logging)).
 
 Stack traces are disabled by default because error sets represent *expected* failures, not bugs. Enable them during development if you need to trace where errors originate.
 
@@ -458,6 +463,29 @@ const err = UserError.not_found`User ${"id"} not found`({ id: "abc123" });
 console.log(err);
 // Output: UserError.not_found { id: "abc123" }
 ```
+
+## Serialization and Logging
+
+Both error shapes, including the no-context form (which is a function), serialize to
+plain JSON, so errors survive structured logs and HTTP responses:
+
+```typescript
+const err = UserError.not_found`User ${"id"} not found`({ id: "abc123" });
+
+JSON.stringify(err);
+// {"kind":"not_found","message":"User abc123 not found","data":{"id":"abc123"}}
+
+JSON.stringify({ error: UserError.invalid`Invalid user data` });
+// {"error":{"kind":"invalid","message":"Invalid user data","data":{}}}
+
+String(err);  // "UserError.not_found: User abc123 not found"
+`${err}`;     // same
+```
+
+The JSON shape is `{ kind, message, data, cause? }`. A `cause` that is an errorset error
+serializes the same way, recursively; a native `Error` cause becomes `{ name, message }`.
+`toJSON` and `toString` are non-enumerable, so `Object.keys(err)` and spreading are
+unchanged. Stack traces are not included in the JSON output.
 
 ---
 
@@ -482,6 +510,7 @@ console.log(err);
 | `Set.capture(fn, map)` | Wrap sync code |
 | `Set.captureAsync(fn, map)` | Wrap async code |
 | `[...Set]` | Iterate kinds |
+| `JSON.stringify(err)` / `String(err)` | Serialize / format an error |
 | `configure(options)` | Set global options |
 ---
 

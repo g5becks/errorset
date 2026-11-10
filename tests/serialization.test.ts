@@ -1,0 +1,134 @@
+/**
+ * Serialization and string conversion of both error shapes (audit A4 option a, A7).
+ * @module tests/serialization
+ */
+
+import { describe, expect, it } from "bun:test"
+import { type Err, errorSet } from "../src/index.ts"
+
+type User = { id: string; name: string }
+
+const UserError = errorSet("UserError", ["not_found", "invalid"]).init<User>()
+const DbError = errorSet("DbError", ["timeout"]).init<{ table: string }>()
+
+const roundTrip = (value: unknown): unknown => JSON.parse(JSON.stringify(value))
+
+describe("toJSON", () => {
+  it("serializes a template error to kind, message and data", () => {
+    const err = UserError.not_found`User ${"id"} not found`({ id: "1" })
+    expect(roundTrip(err)).toEqual({
+      kind: "not_found",
+      message: "User 1 not found",
+      data: { id: "1" },
+    })
+  })
+
+  it("serializes a callable no-context error instead of dropping it", () => {
+    const err = UserError.invalid`Invalid user data`
+    expect(JSON.stringify(err)).toBe(
+      '{"kind":"invalid","message":"Invalid user data","data":{}}'
+    )
+  })
+
+  it("keeps both shapes when nested in another object", () => {
+    const template = UserError.not_found`User ${"id"} not found`({ id: "1" })
+    const callable = UserError.invalid`Invalid user data`
+    expect(roundTrip({ error: template, other: callable })).toEqual({
+      error: {
+        kind: "not_found",
+        message: "User 1 not found",
+        data: { id: "1" },
+      },
+      other: { kind: "invalid", message: "Invalid user data", data: {} },
+    })
+  })
+
+  it("serializes an errorset cause recursively", () => {
+    const db = DbError.timeout`Query on ${"table"} timed out`({
+      table: "users",
+    })
+    const callableCause = UserError.invalid`Invalid user data`
+    const err = UserError.not_found`User ${"id"} not found`(
+      { id: "1" },
+      { cause: db }
+    )
+    const wrapped = UserError.invalid`Invalid user data`({
+      cause: callableCause,
+    })
+
+    expect(roundTrip(err)).toEqual({
+      kind: "not_found",
+      message: "User 1 not found",
+      data: { id: "1" },
+      cause: {
+        kind: "timeout",
+        message: "Query on users timed out",
+        data: { table: "users" },
+      },
+    })
+    expect(roundTrip(wrapped)).toEqual({
+      kind: "invalid",
+      message: "Invalid user data",
+      data: {},
+      cause: { kind: "invalid", message: "Invalid user data", data: {} },
+    })
+  })
+
+  it("serializes a native Error cause as name and message", () => {
+    const native = new TypeError("bad input")
+    const err = UserError.not_found`User ${"id"} not found`(
+      { id: "1" },
+      // A native Error cause is accepted at runtime; the type is widened in TASK-058
+      { cause: native as unknown as Err<string, Record<string, unknown>> }
+    )
+    expect(roundTrip(err)).toEqual({
+      kind: "not_found",
+      message: "User 1 not found",
+      data: { id: "1" },
+      cause: { name: "TypeError", message: "bad input" },
+    })
+  })
+
+  it("serializes the error created by calling a callable error", () => {
+    const err = UserError.invalid`Invalid user data`()
+    expect(roundTrip(err)).toEqual({
+      kind: "invalid",
+      message: "Invalid user data",
+      data: {},
+    })
+  })
+})
+
+describe("toString", () => {
+  it("formats a template error as Set.kind: message", () => {
+    const err = UserError.not_found`User ${"id"} not found`({ id: "1" })
+    expect(String(err)).toBe("UserError.not_found: User 1 not found")
+    expect(`${err}`).toBe("UserError.not_found: User 1 not found")
+  })
+
+  it("formats a callable error and its called form the same way", () => {
+    const callable = UserError.invalid`Invalid user data`
+    expect(String(callable)).toBe("UserError.invalid: Invalid user data")
+    expect(String(callable())).toBe("UserError.invalid: Invalid user data")
+  })
+})
+
+describe("enumerability", () => {
+  it("adds no enumerable keys to either shape", () => {
+    const template = UserError.not_found`User ${"id"} not found`({ id: "1" })
+    const callable = UserError.invalid`Invalid user data`
+    const called = callable({ cause: template })
+
+    expect(Object.keys(template)).toEqual(["kind", "message", "data"])
+    expect(Object.keys(callable)).toEqual(["kind", "message", "data"])
+    expect(Object.keys(called)).toEqual(["kind", "message", "data", "cause"])
+    for (const err of [template, callable, called]) {
+      expect(Object.getOwnPropertyDescriptor(err, "toJSON")?.enumerable).toBe(
+        false
+      )
+      expect(Object.getOwnPropertyDescriptor(err, "toString")?.enumerable).toBe(
+        false
+      )
+    }
+  })
+})

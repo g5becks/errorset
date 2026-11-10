@@ -1,10 +1,23 @@
 {
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
   "extends": ["ultracite/biome/core"],
+  "files": {
+    // backlog/ is owned by the Backlog.md CLI and must never be rewritten by other tools
+    "includes": ["!backlog"]
+  },
   "javascript": {
     "formatter": {
       "semicolons": "asNeeded",
       "arrowParentheses": "asNeeded"
+    }
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        // Key order is observable: it fixes the enumeration, JSON and inspect order of
+        // error objects and config, so sorting keys in src/ would change behavior
+        "useSortedKeys": "off"
+      }
     }
   },
   "linter": {
@@ -12,12 +25,29 @@
       "style": {
         // Allow type aliases for complex types with computed symbol keys
         // which cannot be expressed as interfaces
-        "useConsistentTypeDefinitions": "off"
+        "useConsistentTypeDefinitions": "off",
+        // Method-style signatures in the public types are intentional: switching to
+        // property style changes method bivariance in the published .d.ts
+        "useConsistentMethodSignatures": "off"
       },
       "performance": {
         // Allow barrel files for the public API entry point
         "noBarrelFile": "off"
       }
     }
-  }
+  },
+  "overrides": [
+    {
+      // Release and CI scripts run subprocesses one after another on purpose
+      // (ordered output, no concurrent installs into the same directory)
+      "includes": ["scripts/**"],
+      "linter": {
+        "rules": {
+          "performance": {
+            "noAwaitInLoops": "off"
+          }
+        }
+      }
+    }
+  ]
 }

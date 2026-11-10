@@ -1,0 +1,35 @@
+{
+  "bun": "1.4.4",
+  "date": "2026-11-10T18:48:52.648Z",
+  "harness": "module top level; warmup 10000, then 1000000 timed calls per case through one shared call site",
+  "machine": {
+    "arch": "arm64",
+    "cpu": "Apple M5",
+    "os": "darwin 27.2.0",
+    "memoryGiB": 24
+  },
+  "runs": 3,
+  "unit": "ns/op",
+  "cases": {
+    "create_template_2keys": 107.4,
+    "create_template_only": 10.1,
+    "create_callable_no_context": 121.6,
+    "baseline_plain_object": 21.7,
+    "baseline_new_error": 90.5,
+    "guard_set_2kind": 5.6,
+    "guard_set_40kind_last": 42,
+    "guard_non_error": 5.5,
+    "create_include_stack": 484.2
+  },
+  "samples": {
+    "create_template_2keys": [108, 104.5, 107.4],
+    "create_template_only": [10.3, 10.1, 10.1],
+    "create_callable_no_context": [121.6, 119.8, 124.1],
+    "baseline_plain_object": [21.7, 21.6, 21.8],
+    "baseline_new_error": [90.2, 90.5, 91],
+    "guard_set_2kind": [5.6, 5.5, 5.7],
+    "guard_set_40kind_last": [41.8, 43.4, 42],
+    "guard_non_error": [5.5, 5.5, 5.3],
+    "create_include_stack": [485.2, 482.6, 484.2]
+  }
+}
