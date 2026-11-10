@@ -104,14 +104,14 @@ const typeCheck = async (
 }
 
 describe("A1 cross-set confusion", () => {
-  test.failing("A1 [TASK-055] a set guard rejects another set's error with the same kind", () => {
+  test("A1 [TASK-055] a set guard rejects another set's error with the same kind", () => {
     const fromPosition = PositionError.invalid_symbol`bad ${"symbol"}`({
       symbol: "X",
     })
     expect(OrderError(fromPosition)).toBe(false)
   })
 
-  test.failing("A1 [TASK-055] a kind guard rejects another set's error with the same kind", () => {
+  test("A1 [TASK-055] a kind guard rejects another set's error with the same kind", () => {
     const fromPosition = PositionError.invalid_symbol`bad ${"symbol"}`({
       symbol: "X",
     })

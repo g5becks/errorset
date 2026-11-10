@@ -82,6 +82,7 @@ describe("deprecated format and colors", () => {
     const err = makeSet().not_found`User ${"id"} not found`({ id: "1" })
     expect(String(err)).toBe("UserError.not_found: User 1 not found")
     expect(JSON.parse(JSON.stringify(err))).toEqual({
+      set: "UserError",
       kind: "not_found",
       message: "User 1 not found",
       data: { id: "1" },

@@ -134,7 +134,10 @@ if (isErr(unknownValue)) {
 // Set-level guard type narrowing
 // =============================================================================
 
-type GetUserResult = User | Err<"not_found" | "suspended", Partial<User>>
+// Errors carry their set name; a result type names the set it comes from (0.4.0)
+type GetUserResult =
+  | User
+  | Err<"not_found" | "suspended", Partial<User>, "UserError">
 declare const userResult: GetUserResult
 
 if (UserError(userResult)) {
@@ -371,3 +374,51 @@ expectTypeOf(UserError.invalid(callableErr)).toEqualTypeOf<boolean>()
 const withHoles = UserError.not_found`User ${"id"} not found`({ id: "123" })
 expectTypeOf(withHoles.kind).toEqualTypeOf<"not_found">()
 expectTypeOf(withHoles.data).toEqualTypeOf<{ id: string }>()
+
+// =============================================================================
+// Set identity (0.4.0, audit A1): errors carry their set, guards are set-precise
+// =============================================================================
+
+type Position = { symbol: string }
+const OrderErrors = errorSet("OrderError", [
+  "invalid_symbol",
+  "rejected",
+]).init<Position>()
+const PositionErrors = errorSet("PositionError", [
+  "invalid_symbol",
+  "fetch_failed",
+]).init<Position>()
+type OrderErrors = typeof OrderErrors.Type
+type PositionErrors = typeof PositionErrors.Type
+
+const orderErr = OrderErrors.invalid_symbol`bad ${"symbol"}`({ symbol: "X" })
+expectTypeOf(orderErr.set).toEqualTypeOf<"OrderError">()
+expectTypeOf(OrderErrors.rejected`static`.set).toEqualTypeOf<"OrderError">()
+expectTypeOf<OrderErrors["set"]>().toEqualTypeOf<"OrderError">()
+
+declare const either: OrderErrors | PositionErrors
+if (OrderErrors(either)) {
+  // A same-kind error from another set does not narrow into OrderError
+  expectTypeOf(either).toEqualTypeOf<OrderErrors>()
+  expectTypeOf(either.set).toEqualTypeOf<"OrderError">()
+}
+if (OrderErrors.invalid_symbol(either)) {
+  expectTypeOf(either.set).toEqualTypeOf<"OrderError">()
+  expectTypeOf(either.kind).toEqualTypeOf<"invalid_symbol">()
+}
+if (PositionErrors.invalid_symbol(either)) {
+  expectTypeOf(either.set).toEqualTypeOf<"PositionError">()
+}
+
+// An Err from another set is not accepted where a set's errors are expected
+// @ts-expect-error - PositionError's error is not an OrderError
+const wrongSet: OrderErrors = PositionErrors.invalid_symbol`bad ${"symbol"}`({
+  symbol: "X",
+})
+expectTypeOf(wrongSet).not.toBeAny()
+
+// merge keeps both set names
+const Merged = OrderErrors.merge(PositionErrors)
+if (Merged(either)) {
+  expectTypeOf(either.set).toEqualTypeOf<"OrderError" | "PositionError">()
+}

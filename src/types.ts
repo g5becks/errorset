@@ -57,6 +57,7 @@ export const INSPECT: unique symbol = Symbol.for("nodejs.util.inspect.custom")
  *
  * @typeParam Kind - String literal type for the error kind (e.g., "not_found")
  * @typeParam Data - Record type containing extracted context data
+ * @typeParam Set - String literal type of the error set's name (e.g., "UserError")
  *
  * @example
  * ```ts
@@ -66,9 +67,12 @@ export const INSPECT: unique symbol = Symbol.for("nodejs.util.inspect.custom")
 export type Err<
   Kind extends string = string,
   Data extends Record<string, unknown> = Record<string, unknown>,
+  Set extends string = string,
 > = {
   /** Brand identifying an error set value; its value is the protocol number */
   readonly [ERR]: ErrProtocol
+  /** Name of the error set that created this error (e.g., "UserError") */
+  readonly set: Set
   /** The error kind/tag (e.g., "not_found", "validation") */
   readonly kind: Kind
   /** Human-readable error message */
@@ -166,7 +170,10 @@ export type NoDuplicates<T extends readonly string[]> =
  *
  * @typeParam Kinds - Tuple type of error kind strings
  */
-export type ErrorSetBuilder<Kinds extends readonly string[]> = {
+export type ErrorSetBuilder<
+  Kinds extends readonly string[],
+  N extends string = string,
+> = {
   /**
    * Initialize the error set with an entity type.
    *
@@ -186,7 +193,7 @@ export type ErrorSetBuilder<Kinds extends readonly string[]> = {
    */
   init<T extends Record<string, unknown>>(
     config?: ErrorSetConfig
-  ): ErrorSet<Kinds[number], T>
+  ): ErrorSet<Kinds[number], T, N>
 }
 
 /**
@@ -197,7 +204,8 @@ export type ErrorCreator<
   Kind extends string,
   T extends Record<string, unknown>,
   K extends keyof T,
-> = (entity: Pick<T, K>, options?: ErrorOptions) => Err<Kind, Pick<T, K>>
+  N extends string = string,
+> = (entity: Pick<T, K>, options?: ErrorOptions) => Err<Kind, Pick<T, K>, N>
 
 /**
  * A callable error that is both an error value AND a function.
@@ -213,11 +221,12 @@ export type ErrorCreator<
  * return BackupError.config_invalid`S3 configuration required`({ cause: someError })
  * ```
  */
-export type CallableErr<Kind extends string> = Err<
+export type CallableErr<Kind extends string, N extends string = string> = Err<
   Kind,
-  Record<string, never>
+  Record<string, never>,
+  N
 > &
-  ((options?: ErrorOptions) => Err<Kind, Record<string, never>>)
+  ((options?: ErrorOptions) => Err<Kind, Record<string, never>, N>)
 
 /**
  * Tagged template function for a specific error kind.
@@ -232,14 +241,15 @@ export type CallableErr<Kind extends string> = Err<
 export type KindConstructor<
   Kind extends string,
   T extends Record<string, unknown>,
+  N extends string = string,
 > = {
   // Overload for no template holes - returns CallableErr
-  (strings: TemplateStringsArray): CallableErr<Kind>
+  (strings: TemplateStringsArray): CallableErr<Kind, N>
   // Overload for template holes - returns ErrorCreator
   <K extends keyof T & string>(
     strings: TemplateStringsArray,
     ...keys: K[]
-  ): ErrorCreator<Kind, T, K>
+  ): ErrorCreator<Kind, T, K, N>
 }
 
 /**
@@ -249,7 +259,8 @@ export type KindConstructor<
 export type KindGuard<
   Kind extends string,
   T extends Record<string, unknown>,
-> = (value: unknown) => value is Err<Kind, Partial<T>>
+  N extends string = string,
+> = (value: unknown) => value is Err<Kind, Partial<T>, N>
 
 /**
  * Dual-purpose kind function that acts as both:
@@ -259,12 +270,14 @@ export type KindGuard<
 export type KindFunction<
   Kind extends string,
   T extends Record<string, unknown>,
-> = KindConstructor<Kind, T> & KindGuard<Kind, T>
+  N extends string = string,
+> = KindConstructor<Kind, T, N> & KindGuard<Kind, T, N>
 
 /**
- * JSON shape of an error: `{ kind, message, data, cause?, timestamp? }`.
+ * JSON shape of an error: `{ set, kind, message, data, cause?, timestamp? }`.
  */
 type ErrJSON = {
+  set: string
   kind: string
   message: string
   data: unknown
@@ -273,6 +286,7 @@ type ErrJSON = {
 }
 
 type SerializableErr = {
+  set: string
   kind: string
   message: string
   data: unknown
@@ -294,6 +308,7 @@ const serializeCause = (cause: unknown): unknown =>
  */
 function errToJSON(this: SerializableErr): ErrJSON {
   const json: ErrJSON = {
+    set: this.set,
     kind: this.kind,
     message: this.message,
     data: this.data,
@@ -412,11 +427,12 @@ function applyCreationConfig(
 export function createKindFunction<
   Kind extends string,
   T extends Record<string, unknown>,
+  N extends string = string,
 >(
   kind: Kind,
-  name: string,
+  name: N,
   instanceConfig?: Partial<Config>
-): KindFunction<Kind, T> {
+): KindFunction<Kind, T, N> {
   // One `toString` per kind, shared by every error of this kind: "<Set>.<kind>: <message>"
   const errToString = function (this: { message: string }): string {
     return `${name}.${kind}: ${this.message}`
@@ -427,7 +443,7 @@ export function createKindFunction<
   const kindFn = <K extends keyof T & string>(
     stringsOrValue: TemplateStringsArray | object | null | undefined,
     ...keys: K[]
-  ): ErrorCreator<Kind, T, K> | CallableErr<Kind> | boolean => {
+  ): ErrorCreator<Kind, T, K, N> | CallableErr<Kind, N> | boolean => {
     // Check if called as tagged template literal
     // TemplateStringsArray is an array with a 'raw' property
     if (
@@ -448,6 +464,7 @@ export function createKindFunction<
         const callableErr = (options?: ErrorOptions) => {
           const newErr = {
             [ERR]: ERR_PROTOCOL,
+            set: name,
             kind,
             message,
             data,
@@ -455,7 +472,7 @@ export function createKindFunction<
             [INSPECT]() {
               return `${name}.${kind} ${JSON.stringify(data)}`
             },
-          } as Err<Kind, Record<string, never>>
+          } as Err<Kind, Record<string, never>, N>
 
           Object.defineProperties(newErr, serialization)
           applyCreationConfig(newErr, callableErr, instanceConfig)
@@ -465,6 +482,12 @@ export function createKindFunction<
         // Attach error properties to the function itself
         Object.defineProperty(callableErr, ERR, {
           value: ERR_PROTOCOL,
+          writable: false,
+          enumerable: true,
+          configurable: false,
+        })
+        Object.defineProperty(callableErr, "set", {
+          value: name,
           writable: false,
           enumerable: true,
           configurable: false,
@@ -501,14 +524,14 @@ export function createKindFunction<
         // Capture stack trace on the callable error itself
         applyCreationConfig(callableErr, kindFn, instanceConfig)
 
-        return callableErr as unknown as CallableErr<Kind>
+        return callableErr as unknown as CallableErr<Kind, N>
       }
 
       // Return error creator function for template with keys
       const creator = (
         entity: Pick<T, K>,
         options?: ErrorOptions
-      ): Err<Kind, Pick<T, K>> => {
+      ): Err<Kind, Pick<T, K>, N> => {
         // Extract only referenced fields into data
         const data = {} as Record<string, unknown>
         for (const key of keys) {
@@ -527,6 +550,7 @@ export function createKindFunction<
         // Create error object with custom inspect for debuggers
         const err = {
           [ERR]: ERR_PROTOCOL,
+          set: name,
           kind,
           message,
           data: data as Pick<T, K>,
@@ -536,7 +560,7 @@ export function createKindFunction<
           [INSPECT]() {
             return `${name}.${kind} ${JSON.stringify(data)}`
           },
-        } as Err<Kind, Pick<T, K>>
+        } as Err<Kind, Pick<T, K>, N>
 
         Object.defineProperties(err, serialization)
 
@@ -555,7 +579,9 @@ export function createKindFunction<
       return false
     }
 
-    return (value as unknown as Record<string, unknown>).kind === kind
+    // Set-precise: another set's error with the same kind name does not match
+    const candidate = value as unknown as Record<string, unknown>
+    return candidate.kind === kind && candidate.set === name
   }
 
   // Add string coercion support
@@ -575,7 +601,7 @@ export function createKindFunction<
     configurable: false,
   })
 
-  return kindFn as KindFunction<Kind, T>
+  return kindFn as KindFunction<Kind, T, N>
 }
 
 /**
@@ -585,22 +611,97 @@ export function createKindFunction<
 export type SetGuard<
   Kinds extends string,
   T extends Record<string, unknown>,
-> = ((value: unknown) => value is Err<Kinds, Partial<T>>) & {
+  N extends string = string,
+> = ((value: unknown) => value is Err<Kinds, Partial<T>, N>) & {
   /** Symbol.hasInstance for instanceof support */
-  [Symbol.hasInstance](value: unknown): value is Err<Kinds, Partial<T>>
+  [Symbol.hasInstance](value: unknown): value is Err<Kinds, Partial<T>, N>
 }
 
 /**
+ * Key under which a guard stores the (set, kind) pairs it accepts, so `merge` can
+ * combine guards without losing set precision. A registry symbol, so guards from
+ * another copy of errorset can be merged too.
+ *
+ * @internal
+ */
+const MEMBERS: unique symbol = Symbol.for("@takinprofit/errorset/members")
+
+/**
+ * One accepted (set, kind) pair. `set: undefined` accepts the kind from any set
+ * (only produced by the deprecated helpers when called without a set name).
+ *
+ * @internal
+ */
+type Member = { readonly set: string | undefined; readonly kind: string }
+
+/** Builds a set-precise membership test from (set, kind) pairs. @internal */
+const membershipTest = (
+  members: readonly Member[]
+): ((set: unknown, kind: string) => boolean) => {
+  const names = new Set(members.map(member => member.set))
+  const [onlyName] = names
+  if (names.size === 1 && onlyName !== undefined) {
+    // Fast path for a single named set (every errorSet guard)
+    const kinds = members.map(member => member.kind)
+    return (set, kind) => set === onlyName && kinds.includes(kind)
+  }
+  const bySet = new Map<string | undefined, Set<string>>()
+  for (const { set, kind } of members) {
+    const kinds = bySet.get(set) ?? new Set<string>()
+    kinds.add(kind)
+    bySet.set(set, kinds)
+  }
+  const anySet = bySet.get(undefined)
+  return (set, kind) =>
+    (typeof set === "string" && (bySet.get(set)?.has(kind) ?? false)) ||
+    (anySet?.has(kind) ?? false)
+}
+
+/** Creates a guard over (set, kind) pairs, with instanceof support. @internal */
+const createMemberGuard = <
+  Kinds extends string,
+  T extends Record<string, unknown>,
+  N extends string,
+>(
+  members: readonly Member[]
+): SetGuard<Kinds, T, N> => {
+  const accepts = membershipTest(members)
+  const guard = (value: unknown): value is Err<Kinds, Partial<T>, N> => {
+    // Must carry a brand this copy understands (objects and callable errors)
+    if (!hasBrand(value)) {
+      return false
+    }
+    const { kind, set } = value as unknown as Record<string, unknown>
+    return typeof kind === "string" && accepts(set, kind)
+  }
+
+  Object.defineProperties(guard, {
+    [Symbol.hasInstance]: { value: (value: unknown): boolean => guard(value) },
+    [MEMBERS]: { value: members },
+  })
+
+  return guard as SetGuard<Kinds, T, N>
+}
+
+/** The (set, kind) pairs a guard accepts; a guard without them accepts its kinds from any set. @internal */
+const membersOf = (guard: {
+  readonly kinds: readonly string[]
+}): readonly Member[] =>
+  (guard as { [MEMBERS]?: readonly Member[] })[MEMBERS] ??
+  guard.kinds.map(kind => ({ set: undefined, kind }))
+
+/**
  * Creates a set-level type guard for an error set.
- * Returns true if the value is any error from this set.
- * Also supports instanceof operator via Symbol.hasInstance.
+ * Returns true if the value is an error of one of `kinds` created by the set named
+ * `setName`. Also supports the instanceof operator via Symbol.hasInstance.
  *
  * @param kinds - Array of valid error kinds for this set
+ * @param setName - Name of the set; without it, the guard accepts these kinds from any set
  * @returns A type guard function with instanceof support
  *
  * @example
  * ```ts
- * const UserError = createSetGuard<"not_found" | "invalid", User>(["not_found", "invalid"])
+ * const UserError = createSetGuard<"not_found" | "invalid", User>(["not_found", "invalid"], "UserError")
  *
  * // Callable guard:
  * if (UserError(result)) { ... }
@@ -615,31 +716,11 @@ export type SetGuard<
 export function createSetGuard<
   Kinds extends string,
   T extends Record<string, unknown>,
->(kinds: Kinds[]): SetGuard<Kinds, T> {
-  const guard = (value: unknown): value is Err<Kinds, Partial<T>> => {
-    // Must carry a brand this copy understands (objects and callable errors)
-    if (!hasBrand(value)) {
-      return false
-    }
-
-    // Must have a kind property that is in our set
-    const { kind } = value as Record<string, unknown>
-    if (typeof kind !== "string") {
-      return false
-    }
-
-    return kinds.includes(kind as Kinds)
-  }
-
-  // Add Symbol.hasInstance for instanceof support
-  Object.defineProperty(guard, Symbol.hasInstance, {
-    value: (value: unknown): boolean => guard(value),
-    writable: false,
-    enumerable: false,
-    configurable: false,
-  })
-
-  return guard as SetGuard<Kinds, T>
+  N extends string = string,
+>(kinds: Kinds[], setName?: N): SetGuard<Kinds, T, N> {
+  return createMemberGuard<Kinds, T, N>(
+    kinds.map(kind => ({ set: setName, kind }))
+  )
 }
 
 /**
@@ -650,7 +731,8 @@ export type RecoverHandler<
   Kind extends string,
   T extends Record<string, unknown>,
   R,
-> = (error: Err<Kind, Partial<T>>) => R
+  N extends string = string,
+> = (error: Err<Kind, Partial<T>, N>) => R
 
 /**
  * Handlers object for recover method.
@@ -660,17 +742,18 @@ export type RecoverHandlers<
   Kinds extends string,
   T extends Record<string, unknown>,
   R,
+  N extends string = string,
 > = {
-  [K in Kinds]?: RecoverHandler<K, T, R>
+  [K in Kinds]?: RecoverHandler<K, T, R, N>
 } & {
   /** Catch-all handler for any unmatched error kind */
-  _?: RecoverHandler<Kinds, T, R>
+  _?: RecoverHandler<Kinds, T, R, N>
 }
 
 /**
  * Provides expression-style error handling with guaranteed recovery.
  *
- * Returns the success value unchanged if not an error.
+ * Returns the success value unchanged if not an error of the guard's set.
  * For errors, applies the matching handler or catch-all.
  * Throws if no matching handler is found.
  *
@@ -693,12 +776,13 @@ export function recover<
   Kinds extends string,
   T extends Record<string, unknown>,
   R,
+  N extends string = string,
 >(
-  value: Success | Err<Kinds, Partial<T>>,
-  guard: SetGuard<Kinds, T>,
-  handlers: RecoverHandlers<Kinds, T, R>
+  value: Success | Err<Kinds, Partial<T>, N>,
+  guard: SetGuard<Kinds, T, N>,
+  handlers: RecoverHandlers<Kinds, T, R, N>
 ): Success | R {
-  // If not an error, return success value unchanged
+  // If not an error of this set, return the value unchanged
   if (!guard(value)) {
     return value
   }
@@ -733,7 +817,8 @@ export function recover<
 export type InspectHandler<
   Kind extends string,
   T extends Record<string, unknown>,
-> = (error: Err<Kind, Partial<T>>) => void
+  N extends string = string,
+> = (error: Err<Kind, Partial<T>, N>) => void
 
 /**
  * Handlers object for inspect method.
@@ -742,14 +827,15 @@ export type InspectHandler<
 export type InspectHandlers<
   Kinds extends string,
   T extends Record<string, unknown>,
+  N extends string = string,
 > = {
-  [K in Kinds]?: InspectHandler<K, T>
+  [K in Kinds]?: InspectHandler<K, T, N>
 }
 
 /**
  * Observes errors without changing the type or control flow.
  *
- * Does nothing if the value is not an error.
+ * Does nothing if the value is not an error of the guard's set.
  * For errors, calls the matching handler if provided.
  * Does not modify the result value - useful for logging, metrics, auditing.
  *
@@ -771,12 +857,13 @@ export function inspect<
   Success,
   Kinds extends string,
   T extends Record<string, unknown>,
+  N extends string = string,
 >(
-  value: Success | Err<Kinds, Partial<T>>,
-  guard: SetGuard<Kinds, T>,
-  handlers: InspectHandlers<Kinds, T>
+  value: Success | Err<Kinds, Partial<T>, N>,
+  guard: SetGuard<Kinds, T, N>,
+  handlers: InspectHandlers<Kinds, T, N>
 ): void {
-  // If not an error, do nothing
+  // If not an error of this set, do nothing
   if (!guard(value)) {
     return
   }
@@ -800,9 +887,23 @@ export function inspect<
 export type SetGuardWithKinds<
   Kinds extends string,
   T extends Record<string, unknown>,
-> = SetGuard<Kinds, T> & {
+  N extends string = string,
+> = SetGuard<Kinds, T, N> & {
   /** Array of valid kinds for this set */
   readonly kinds: readonly Kinds[]
+}
+
+/** Adds the non-enumerable `kinds` array to a guard. @internal */
+const withKinds = <
+  Kinds extends string,
+  T extends Record<string, unknown>,
+  N extends string,
+>(
+  guard: SetGuard<Kinds, T, N>,
+  kinds: readonly Kinds[]
+): SetGuardWithKinds<Kinds, T, N> => {
+  Object.defineProperty(guard, "kinds", { value: kinds })
+  return guard as SetGuardWithKinds<Kinds, T, N>
 }
 
 /**
@@ -810,6 +911,7 @@ export type SetGuardWithKinds<
  * This is used internally for merge operations.
  *
  * @param kinds - Array of valid error kinds for this set
+ * @param setName - Name of the set; without it, the guard accepts these kinds from any set
  * @returns A type guard function with kinds array and instanceof support
  *
  * @internal
@@ -818,25 +920,17 @@ export type SetGuardWithKinds<
 export function createSetGuardWithKinds<
   Kinds extends string,
   T extends Record<string, unknown>,
->(kinds: readonly Kinds[]): SetGuardWithKinds<Kinds, T> {
-  const guard = createSetGuard<Kinds, T>(kinds as Kinds[])
-
-  // Add kinds array to the guard
-  Object.defineProperty(guard, "kinds", {
-    value: kinds,
-    writable: false,
-    enumerable: false,
-    configurable: false,
-  })
-
-  return guard as SetGuardWithKinds<Kinds, T>
+  N extends string = string,
+>(kinds: readonly Kinds[], setName?: N): SetGuardWithKinds<Kinds, T, N> {
+  return withKinds(createSetGuard<Kinds, T, N>([...kinds], setName), kinds)
 }
 
 /**
  * Merges two error set guards into a unified guard.
  *
- * The merged guard checks for errors from either original set.
- * Data becomes untyped (Record<string, unknown>) since sets may have different entity types.
+ * The merged guard accepts exactly the errors either original guard accepts: the
+ * (set, kind) pairs are combined, so set precision is kept. Data becomes untyped
+ * (Record<string, unknown>) since sets may have different entity types.
  * Original sets remain unchanged.
  *
  * @param guard1 - First error set guard
@@ -845,31 +939,31 @@ export function createSetGuardWithKinds<
  *
  * @example
  * ```ts
- * const UserError = createSetGuardWithKinds<"not_found" | "suspended", User>(["not_found", "suspended"])
- * const OrderError = createSetGuardWithKinds<"cancelled" | "expired", Order>(["cancelled", "expired"])
+ * const UserError = errorSet("UserError", ["not_found", "suspended"]).init<User>()
+ * const OrderError = errorSet("OrderError", ["cancelled", "expired"]).init<Order>()
  *
  * const ServiceError = merge(UserError, OrderError)
- * // ServiceError matches "not_found" | "suspended" | "cancelled" | "expired"
+ * // ServiceError matches UserError's and OrderError's errors
  * ```
  */
 export function merge<
   Kinds1 extends string,
   T1 extends Record<string, unknown>,
+  N1 extends string,
   Kinds2 extends string,
   T2 extends Record<string, unknown>,
+  N2 extends string,
 >(
-  guard1: SetGuardWithKinds<Kinds1, T1>,
-  guard2: SetGuardWithKinds<Kinds2, T2>
-): SetGuardWithKinds<Kinds1 | Kinds2, Record<string, unknown>> {
-  // Combine kinds from both guards
-  const combinedKinds = [...guard1.kinds, ...guard2.kinds] as (
-    | Kinds1
-    | Kinds2
-  )[]
-
-  // Create new guard with combined kinds
-  return createSetGuardWithKinds<Kinds1 | Kinds2, Record<string, unknown>>(
-    combinedKinds
+  guard1: SetGuardWithKinds<Kinds1, T1, N1>,
+  guard2: SetGuardWithKinds<Kinds2, T2, N2>
+): SetGuardWithKinds<Kinds1 | Kinds2, Record<string, unknown>, N1 | N2> {
+  const members = [...membersOf(guard1), ...membersOf(guard2)]
+  const kinds = [...guard1.kinds, ...guard2.kinds] as (Kinds1 | Kinds2)[]
+  return withKinds(
+    createMemberGuard<Kinds1 | Kinds2, Record<string, unknown>, N1 | N2>(
+      members
+    ),
+    kinds
   )
 }
 
@@ -880,7 +974,8 @@ export function merge<
 export type ErrorMapper<
   Kinds extends string,
   T extends Record<string, unknown>,
-> = (error: Error) => Err<Kinds, Partial<T>>
+  N extends string = string,
+> = (error: Error) => Err<Kinds, Partial<T>, N>
 
 /**
  * Wraps synchronous throwing code and converts exceptions to error set values.
@@ -906,10 +1001,11 @@ export function captureSync<
   T,
   Kinds extends string,
   Data extends Record<string, unknown>,
+  N extends string = string,
 >(
   fn: () => T,
-  mapper: ErrorMapper<Kinds, Data>
-): T | Err<Kinds, Partial<Data>> {
+  mapper: ErrorMapper<Kinds, Data, N>
+): T | Err<Kinds, Partial<Data>, N> {
   try {
     return fn()
   } catch (error_) {
@@ -943,10 +1039,11 @@ export async function captureAsync<
   T,
   Kinds extends string,
   Data extends Record<string, unknown>,
+  N extends string = string,
 >(
   fn: () => Promise<T>,
-  mapper: ErrorMapper<Kinds, Data>
-): Promise<T | Err<Kinds, Partial<Data>>> {
+  mapper: ErrorMapper<Kinds, Data, N>
+): Promise<T | Err<Kinds, Partial<Data>, N>> {
   try {
     return await fn()
   } catch (error_) {
@@ -968,60 +1065,97 @@ export async function captureAsync<
 export type ErrorSet<
   Kinds extends string,
   T extends Record<string, unknown>,
-> = SetGuardWithKinds<Kinds, T> & {
+  N extends string = string,
+> = SetGuardWithKinds<Kinds, T, N> & {
   /** Kind constructors indexed by kind name */
-  [K in Kinds]: KindFunction<K, T>
+  [K in Kinds]: KindFunction<K, T, N>
 } & {
   /**
    * Type helper for exporting error set type.
    * Use: export type MyError = typeof MyError.Type
    */
-  readonly Type: Err<Kinds, Partial<T>>
+  readonly Type: Err<Kinds, Partial<T>, N>
 
   /**
    * Expression-style error handling with guaranteed recovery.
    */
   recover<Success, R>(
-    value: Success | Err<Kinds, Partial<T>>,
-    handlers: RecoverHandlers<Kinds, T, R>
+    value: Success | Err<Kinds, Partial<T>, N>,
+    handlers: RecoverHandlers<Kinds, T, R, N>
   ): Success | R
 
   /**
    * Observe errors without changing type or control flow.
    */
   inspect<Success>(
-    value: Success | Err<Kinds, Partial<T>>,
-    handlers: InspectHandlers<Kinds, T>
+    value: Success | Err<Kinds, Partial<T>, N>,
+    handlers: InspectHandlers<Kinds, T, N>
   ): void
 
   /**
    * Merge with another error set to create unified guard.
    */
-  merge<Kinds2 extends string, T2 extends Record<string, unknown>>(
-    other: SetGuardWithKinds<Kinds2, T2>
-  ): SetGuardWithKinds<Kinds | Kinds2, Record<string, unknown>>
+  merge<
+    Kinds2 extends string,
+    T2 extends Record<string, unknown>,
+    N2 extends string,
+  >(
+    other: SetGuardWithKinds<Kinds2, T2, N2>
+  ): SetGuardWithKinds<Kinds | Kinds2, Record<string, unknown>, N | N2>
 
   /**
    * Wrap synchronous throwing code.
    */
   capture<Result>(
     fn: () => Result,
-    mapper: ErrorMapper<Kinds, T>
-  ): Result | Err<Kinds, Partial<T>>
+    mapper: ErrorMapper<Kinds, T, N>
+  ): Result | Err<Kinds, Partial<T>, N>
 
   /**
    * Wrap asynchronous throwing code.
    */
   captureAsync<Result>(
     fn: () => Promise<Result>,
-    mapper: ErrorMapper<Kinds, T>
-  ): Promise<Result | Err<Kinds, Partial<T>>>
+    mapper: ErrorMapper<Kinds, T, N>
+  ): Promise<Result | Err<Kinds, Partial<T>, N>>
 
   /**
    * Iterator for error kind names.
    * Allows for...of loops and spread syntax.
    */
   [Symbol.iterator](): IterableIterator<string>
+}
+
+/**
+ * Kinds of every set name defined in this copy of errorset, for the duplicate-name check.
+ *
+ * Errors are matched by set name, so two different sets with the same name accept each
+ * other's errors for the kinds they share. Policy: redefining a name with the same kinds
+ * (hot reload, re-evaluated modules, tests) is silent; redefining it with different kinds
+ * warns once per name. It never throws, so hot reload keeps working.
+ *
+ * @internal
+ */
+const definedSets = new Map<string, string>()
+const warnedSetNames = new Set<string>()
+
+const registerSetName = (name: string, kinds: readonly string[]): void => {
+  const signature = [...kinds].sort().join("\u0000")
+  const previous = definedSets.get(name)
+  definedSets.set(name, signature)
+  if (
+    previous === undefined ||
+    previous === signature ||
+    warnedSetNames.has(name)
+  ) {
+    return
+  }
+  warnedSetNames.add(name)
+  console.warn(
+    `errorset: error set "${name}" is defined more than once with different kinds. ` +
+      "Errors are matched by set name, so these sets accept each other's errors for " +
+      "shared kinds. Give each error set a unique name."
+  )
 }
 
 /**
@@ -1072,7 +1206,7 @@ export type ErrorSet<
 export function errorSet<
   N extends string,
   const Kinds extends readonly string[],
->(name: N, kinds: NoDuplicates<Kinds>): ErrorSetBuilder<Kinds> {
+>(name: N, kinds: NoDuplicates<Kinds>): ErrorSetBuilder<Kinds, N> {
   // Runtime validation for JavaScript consumers or edge cases
   const seen = new Set<string>()
   for (const kind of kinds) {
@@ -1085,15 +1219,17 @@ export function errorSet<
   return {
     init<T extends Record<string, unknown>>(
       config?: ErrorSetConfig
-    ): ErrorSet<Kinds[number], T> {
-      // Create the base guard with kinds array
-      const guard = createSetGuardWithKinds<Kinds[number], T>(kinds)
+    ): ErrorSet<Kinds[number], T, N> {
+      registerSetName(name, kinds)
+
+      // Create the base guard: errors of these kinds created by the set named `name`
+      const guard = createSetGuardWithKinds<Kinds[number], T, N>(kinds, name)
 
       // Create kind functions and attach to guard
-      const errorSetObj = guard as unknown as ErrorSet<Kinds[number], T>
+      const errorSetObj = guard as unknown as ErrorSet<Kinds[number], T, N>
 
       for (const kind of kinds) {
-        const kindFn = createKindFunction<string, T>(kind, name, config)
+        const kindFn = createKindFunction<string, T, N>(kind, name, config)
         Object.defineProperty(errorSetObj, kind, {
           value: kindFn,
           writable: false,
@@ -1113,8 +1249,8 @@ export function errorSet<
       // Attach recover method bound to this guard
       Object.defineProperty(errorSetObj, "recover", {
         value: <Success, R>(
-          value: Success | Err<Kinds[number], Partial<T>>,
-          handlers: RecoverHandlers<Kinds[number], T, R>
+          value: Success | Err<Kinds[number], Partial<T>, N>,
+          handlers: RecoverHandlers<Kinds[number], T, R, N>
         ): Success | R => recover(value, guard, handlers),
         writable: false,
         enumerable: false,
@@ -1124,8 +1260,8 @@ export function errorSet<
       // Attach inspect method bound to this guard
       Object.defineProperty(errorSetObj, "inspect", {
         value: <Success>(
-          value: Success | Err<Kinds[number], Partial<T>>,
-          handlers: InspectHandlers<Kinds[number], T>
+          value: Success | Err<Kinds[number], Partial<T>, N>,
+          handlers: InspectHandlers<Kinds[number], T, N>
         ): void => inspect(value, guard, handlers),
         writable: false,
         enumerable: false,
@@ -1134,10 +1270,17 @@ export function errorSet<
 
       // Attach merge method
       Object.defineProperty(errorSetObj, "merge", {
-        value: <Kinds2 extends string, T2 extends Record<string, unknown>>(
-          other: SetGuardWithKinds<Kinds2, T2>
-        ): SetGuardWithKinds<Kinds[number] | Kinds2, Record<string, unknown>> =>
-          merge(guard, other),
+        value: <
+          Kinds2 extends string,
+          T2 extends Record<string, unknown>,
+          N2 extends string,
+        >(
+          other: SetGuardWithKinds<Kinds2, T2, N2>
+        ): SetGuardWithKinds<
+          Kinds[number] | Kinds2,
+          Record<string, unknown>,
+          N | N2
+        > => merge(guard, other),
         writable: false,
         enumerable: false,
         configurable: false,
@@ -1147,8 +1290,9 @@ export function errorSet<
       Object.defineProperty(errorSetObj, "capture", {
         value: <Result>(
           fn: () => Result,
-          mapper: ErrorMapper<Kinds[number], T>
-        ): Result | Err<Kinds[number], Partial<T>> => captureSync(fn, mapper),
+          mapper: ErrorMapper<Kinds[number], T, N>
+        ): Result | Err<Kinds[number], Partial<T>, N> =>
+          captureSync(fn, mapper),
         writable: false,
         enumerable: false,
         configurable: false,
@@ -1158,8 +1302,8 @@ export function errorSet<
       Object.defineProperty(errorSetObj, "captureAsync", {
         value: <Result>(
           fn: () => Promise<Result>,
-          mapper: ErrorMapper<Kinds[number], T>
-        ): Promise<Result | Err<Kinds[number], Partial<T>>> =>
+          mapper: ErrorMapper<Kinds[number], T, N>
+        ): Promise<Result | Err<Kinds[number], Partial<T>, N>> =>
           captureAsync(fn, mapper),
         writable: false,
         enumerable: false,

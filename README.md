@@ -230,6 +230,32 @@ if (UserError(result)) {
 console.log(result.name);
 ```
 
+### Set Identity
+
+Every error records the set that created it in a `set` field (`err.set === "UserError"`), and
+set guards, kind guards, `instanceof`, `recover`, `inspect` and merged guards all check it. Two
+sets that share a kind name never match each other's errors:
+
+```typescript
+const OrderError = errorSet("OrderError", ["invalid_symbol", "rejected"]).init<Order>();
+const PositionError = errorSet("PositionError", ["invalid_symbol", "fetch_failed"]).init<Position>();
+
+const err = PositionError.invalid_symbol`Bad symbol ${"symbol"}`({ symbol: "XYZ" });
+OrderError(err);                // false
+OrderError.invalid_symbol(err); // false
+PositionError(err);             // true
+```
+
+The set name is part of the type too (`Err<Kind, Data, SetName>`), so narrowing a union of
+`OrderError | PositionError` with `OrderError(value)` leaves only `OrderError`. When you write an
+error type by hand, include the set name or use `typeof UserError.Type`.
+
+**Set names must be unique.** Errors are matched by set name, not by object identity, which is
+what lets separately bundled copies recognize each other. Defining the same name again with the
+same kinds is fine (hot reload, tests); defining it with different kinds logs a one-time
+`console.warn`, because those sets would accept each other's errors for the kinds they share.
+Namespaced names such as `"billing/PaymentError"` avoid collisions.
+
 ### `instanceof` Syntax
 
 Error sets support `instanceof` via `Symbol.hasInstance`:
@@ -486,16 +512,16 @@ plain JSON, so errors survive structured logs and HTTP responses:
 const err = UserError.not_found`User ${"id"} not found`({ id: "abc123" });
 
 JSON.stringify(err);
-// {"kind":"not_found","message":"User abc123 not found","data":{"id":"abc123"}}
+// {"set":"UserError","kind":"not_found","message":"User abc123 not found","data":{"id":"abc123"}}
 
 JSON.stringify({ error: UserError.invalid`Invalid user data` });
-// {"error":{"kind":"invalid","message":"Invalid user data","data":{}}}
+// {"error":{"set":"UserError","kind":"invalid","message":"Invalid user data","data":{}}}
 
 String(err);  // "UserError.not_found: User abc123 not found"
 `${err}`;     // same
 ```
 
-The JSON shape is `{ kind, message, data, cause? }`. A `cause` that is an errorset error
+The JSON shape is `{ set, kind, message, data, cause?, timestamp? }`. A `cause` that is an errorset error
 serializes the same way, recursively; a native `Error` cause becomes `{ name, message }`.
 `toJSON` and `toString` are non-enumerable, so `Object.keys(err)` and spreading are
 unchanged. Stack traces are not included in the JSON output.

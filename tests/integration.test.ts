@@ -583,11 +583,12 @@ describe("Tag Collisions in Merged Sets", () => {
       const errA = SetA.not_found`A ${"idA"}`({ idA: "1" })
       const errB = SetB.not_found`B ${"idB"}`({ idB: "2" })
 
-      // Original set guards still work correctly
+      // Kind guards are set-precise since 0.4.0 (audit A1): a same-named kind
+      // from another set does not match
       expect(SetA.not_found(errA)).toBe(true)
-      expect(SetA.not_found(errB)).toBe(true) // Same kind string matches
+      expect(SetA.not_found(errB)).toBe(false)
 
-      expect(SetB.not_found(errA)).toBe(true) // Same kind string matches
+      expect(SetB.not_found(errA)).toBe(false)
       expect(SetB.not_found(errB)).toBe(true)
     })
 
@@ -595,11 +596,12 @@ describe("Tag Collisions in Merged Sets", () => {
       const errA = SetA.not_found`A ${"idA"}`({ idA: "1" })
       const errB = SetB.not_found`B ${"idB"}`({ idB: "2" })
 
-      // Set-level guards distinguish by kinds in set
+      // Set-level guards distinguish by set since 0.4.0 (audit A1), even when the
+      // kind name exists in both sets
       expect(SetA(errA)).toBe(true)
-      expect(SetA(errB)).toBe(true) // "not_found" is in SetA's kinds
+      expect(SetA(errB)).toBe(false)
 
-      expect(SetB(errA)).toBe(true) // "not_found" is in SetB's kinds
+      expect(SetB(errA)).toBe(false)
       expect(SetB(errB)).toBe(true)
     })
   })

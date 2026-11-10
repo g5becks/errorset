@@ -156,8 +156,8 @@ ErrorSet.kind`message without holes`(options?)  // optional call for cause
 - TypeScript enforces valid field names at compile time
 
 **Returns:** 
-- With holes: `Err<Kind, Pick<T, ReferencedFields>>`
-- Without holes: `CallableErr<Kind>` - both an error value AND a function
+- With holes: `Err<Kind, Pick<T, ReferencedFields>, SetName>`
+- Without holes: `CallableErr<Kind, SetName>` - both an error value AND a function
 
 **Example:**
 ```typescript
@@ -208,7 +208,7 @@ Checks if value is any error from this set.
 
 **Signature:**
 ```typescript
-ErrorSet(value: unknown): value is Err<Kinds, Partial<T>>
+ErrorSet(value: unknown): value is Err<Kinds, Partial<T>, SetName>  // checks err.set === SetName
 ```
 
 **Example:**
@@ -243,7 +243,7 @@ Checks if value is a specific error kind.
 
 **Signature:**
 ```typescript
-ErrorSet.kind(value: unknown): value is Err<Kind, Partial<T>>
+ErrorSet.kind(value: unknown): value is Err<Kind, Partial<T>, SetName>  // checks set and kind
 ```
 
 **Example:**
@@ -577,8 +577,9 @@ function resetConfig(): void
 The error object structure:
 
 ```typescript
-type Err<Kind extends string, Data extends Record<string, unknown>> = {
+type Err<Kind extends string, Data extends Record<string, unknown>, SetName extends string = string> = {
   readonly [ERR]: 1;              // Brand: registry symbol Symbol.for("@takinprofit/errorset/err"), value = protocol (ERR_PROTOCOL)
+  readonly set: SetName;          // Name of the error set that created it (guards check it)
   readonly kind: Kind;            // Error kind literal
   readonly message: string;       // Human-readable message
   readonly data: Data;            // Extracted context fields
