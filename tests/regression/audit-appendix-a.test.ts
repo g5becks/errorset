@@ -166,7 +166,7 @@ describe("A5 brand lost across serialization (v0.5.0)", () => {
 })
 
 describe("A6 capture drops the original error", () => {
-  test.failing("A6 [TASK-058] capture attaches the thrown value as the error's cause", () => {
+  test("A6 [TASK-058] capture attaches the thrown value as the error's cause", () => {
     const C = errorSet("C", ["failed"]).init<{ message: string }>()
     const root = new TypeError("root")
     const result = C.capture(

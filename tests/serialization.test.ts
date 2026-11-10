@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from "bun:test"
-import { type Err, errorSet } from "../src/index.ts"
+import { errorSet } from "../src/index.ts"
 
 type User = { id: string; name: string }
 
@@ -93,8 +93,7 @@ describe("toJSON", () => {
     const native = new TypeError("bad input")
     const err = UserError.not_found`User ${"id"} not found`(
       { id: "1" },
-      // A native Error cause is accepted at runtime; the type is widened in TASK-058
-      { cause: native as unknown as Err<string, Record<string, unknown>> }
+      { cause: native }
     )
     expect(roundTrip(err)).toEqual({
       set: "UserError",

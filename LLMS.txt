@@ -32,7 +32,7 @@ An error set defines a collection of related error kinds bound to a domain entit
 - `kind`: String literal identifying the error type
 - `message`: Human-readable error message
 - `data`: Extracted context from the domain entity
-- `cause`: Optional wrapped error (for error chaining)
+- `cause`: Optional cause of any type (ES2022 semantics: errorset error, native Error, any value); typed `unknown`
 - `stack`: Optional stack trace (when enabled)
 
 ### Builder Pattern API
@@ -155,7 +155,7 @@ ErrorSet.kind`message without holes`(options?)  // optional call for cause
 **Parameters:**
 - Template string with optional `${"fieldName"}` placeholders
 - When holes present: `entity` object with values for referenced fields, plus optional `options`
-- When no holes: Optional `options` with `{ cause?: Err }` for error chaining
+- When no holes: Optional `options` with `{ cause?: unknown }` for error chaining
 
 **Template Holes:**
 - Must be string literals matching `keyof T`
@@ -592,7 +592,7 @@ type Err<Kind extends string, Data extends Record<string, unknown>, SetName exte
   readonly kind: Kind;            // Error kind literal
   readonly message: string;       // Human-readable message
   readonly data: Data;            // Extracted context fields
-  readonly cause?: Err;           // Optional wrapped error
+  readonly cause?: unknown;       // Optional cause (any value; narrow with isErr or a guard)
   readonly timestamp?: number;    // Optional timestamp (when enabled)
   readonly stack?: string;        // Optional stack trace (when enabled)
 }

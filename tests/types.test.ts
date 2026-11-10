@@ -5,6 +5,7 @@
 
 import { describe, expect, it } from "bun:test"
 import { ERR, ERR_PROTOCOL, errorSet, isErr } from "../src/index.ts"
+import { errCause } from "./support/err-cause.ts"
 
 describe("ERR Symbol", () => {
   it("should be the registry symbol shared by every copy of errorset", () => {
@@ -61,7 +62,7 @@ describe("Err Type Structure", () => {
       { cause }
     )
     expect(err.cause).toBeDefined()
-    expect(err.cause?.kind).toBe("suspended")
+    expect(errCause(err.cause).kind).toBe("suspended")
   })
 
   it("should not have cause when not provided", () => {

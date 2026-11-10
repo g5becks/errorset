@@ -213,14 +213,18 @@ if (DbError(dbResult)) {
 }
 ```
 
-Access the chain via `result.cause`:
+`cause` follows ES2022 `Error.cause`: it accepts any value (another errorset error, a native
+`Error`, anything thrown) and is typed `unknown`, so narrow it before use:
 
 ```typescript
-if (ServiceError(result)) {
-  console.log(result.kind);          // "processing_failed"
-  console.log(result.cause?.kind);   // "not_found"
-  console.log(result.cause?.data);   // { id: "user1" }
+if (ServiceError(result) && UserError(result.cause)) {
+  console.log(result.kind);        // "processing_failed"
+  console.log(result.cause.kind);  // "not_found"
+  console.log(result.cause.data);  // { id: "user1" }
 }
+
+// Native errors work too
+return DbError.unavailable`Database unavailable`({ cause: new Error("ECONNREFUSED") });
 ```
 
 ---
@@ -467,9 +471,16 @@ const result = DbError.capture(
 );
 
 if (DbError(result)) {
-  console.log(result.kind);  // "query_failed"
+  console.log(result.kind);   // "query_failed"
+  console.log(result.cause);  // the original exception, with its stack, code, errno...
 }
 ```
+
+The caught value is attached as `cause` unless your mapper sets one, so nothing about the
+original failure is lost. The mapper always receives an `Error`: anything else that was thrown
+(a string, a plain object) is wrapped in an `Error` whose message renders it readably (strings
+as-is, objects as JSON), while `cause` keeps the original value. In JSON output a native `Error`
+cause becomes `{ name, message, code? }`, without its stack.
 
 ### `captureAsync` — Wrap Async Code
 
@@ -479,6 +490,9 @@ const result = await DbError.captureAsync(
   (e) => DbError.query_failed`Query failed: ${"message"}`({ sql, message: e.message })
 );
 ```
+
+Rejections and synchronous throws inside the async function are handled the same way, with the
+original value attached as `cause`.
 
 ---
 

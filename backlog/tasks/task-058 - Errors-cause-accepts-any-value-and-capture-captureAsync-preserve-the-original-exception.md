@@ -3,9 +3,11 @@ id: TASK-058
 title: >-
   Errors: cause accepts any value and capture/captureAsync preserve the original
   exception
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@claude'
 created_date: '2026-11-10T17:35:00Z'
+updated_date: '2026-11-10T20:18:00Z'
 labels:
   - api
   - breaking
@@ -40,3 +42,13 @@ type: bug
 - [ ] #4 CHANGELOG.md lists the change under ## [Unreleased] > ### Breaking changes with migration steps
 - [ ] #5 bash scripts/ci-local.sh HEAD prints RESULT: PASS
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Types: ErrorOptions.cause and Err.cause become unknown (ES2022 semantics); callers narrow with isErr/guards.
+2. capture/captureAsync: call the mapper with an Error (non-Error throws wrapped with a safely rendered message: strings as-is, objects as JSON with a cycle guard and bigint support, else the Object.prototype.toString tag); if the mapped error has no cause, return it with the original thrown value as cause (callable errors: call with { cause }; object errors: copy with all descriptors + cause, no mutation so TASK-061 freezing works); keep a cause the mapper set.
+3. toJSON: native Error cause -> { name, message, code? } (no stack).
+4. Tests: sync throw, async rejection, sync throw inside an async fn, Error subclass with code (+ toJSON code), plain object, string, cyclic object, mapper-provided cause kept, callable mapper result. Flip A6. Type tests: native Error cause compiles.
+5. CHANGELOG breaking + docs; gate; ci-local.
+<!-- SECTION:PLAN:END -->

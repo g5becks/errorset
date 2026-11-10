@@ -114,9 +114,8 @@ declare const mockErr: Err<"not_found", { id: string }>
 expectTypeOf(mockErr.kind).toEqualTypeOf<"not_found">()
 expectTypeOf(mockErr.message).toEqualTypeOf<string>()
 expectTypeOf(mockErr.data).toEqualTypeOf<{ id: string }>()
-expectTypeOf(mockErr.cause).toExtend<
-  Err<string, Record<string, unknown>> | undefined
->()
+// ES2022 cause semantics (0.4.0): any value, narrowed by the caller
+expectTypeOf(mockErr.cause).toEqualTypeOf<unknown>()
 
 // =============================================================================
 // isErr universal guard
@@ -483,3 +482,16 @@ Payment.recover(payment, {
   // @ts-expect-error - unknown kind keys are rejected next to "_" too
   chargeback: () => "c",
 })
+
+// =============================================================================
+// cause accepts any value (0.4.0, audit A6): native Errors type-check
+// =============================================================================
+
+const withNativeCause = UserError.not_found`User ${"id"} not found`(
+  { id: "1" },
+  { cause: new TypeError("socket hang up") }
+)
+expectTypeOf(withNativeCause.cause).toEqualTypeOf<unknown>()
+expectTypeOf(UserError.invalid`Invalid`({ cause: "plain value" })).toExtend<
+  Err<"invalid", Record<string, never>, "UserError">
+>()

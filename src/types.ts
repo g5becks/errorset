@@ -79,8 +79,11 @@ export type Err<
   readonly message: string
   /** Extracted context data from template literal holes */
   readonly data: Data
-  /** Optional wrapped error that caused this error */
-  readonly cause?: Err<string, Record<string, unknown>>
+  /**
+   * What caused this error (ES2022 `cause` semantics): another errorset error, a
+   * native `Error`, or any thrown value. Narrow it with `isErr` or a set guard.
+   */
+  readonly cause?: unknown
   /** Optional timestamp when the error was created */
   readonly timestamp?: number
   /** Optional stack trace (V8 engines only, when enabled) */
@@ -120,8 +123,8 @@ export type ErrorSetConfig = Partial<Config>
  * Options for error creation.
  */
 export type ErrorOptions = {
-  /** Optional wrapped error that caused this error */
-  cause?: Err<string, Record<string, unknown>>
+  /** What caused this error: an errorset error, a native `Error`, or any value */
+  cause?: unknown
 }
 
 /**
@@ -363,10 +366,17 @@ type SerializableErr = {
 /**
  * Serializes a cause for JSON. errorset errors serialize through their own
  * `toJSON` when `JSON.stringify` recurses; a native `Error` would otherwise
- * become `{}`, so it is reduced to `{ name, message }`.
+ * become `{}`, so it is reduced to `{ name, message, code? }` (no stack).
  */
-const serializeCause = (cause: unknown): unknown =>
-  cause instanceof Error ? { name: cause.name, message: cause.message } : cause
+const serializeCause = (cause: unknown): unknown => {
+  if (!(cause instanceof Error)) {
+    return cause
+  }
+  const { code } = cause as Error & { code?: unknown }
+  return typeof code === "string" || typeof code === "number"
+    ? { name: cause.name, message: cause.message, code }
+    : { name: cause.name, message: cause.message }
+}
 
 /**
  * Shared `toJSON` for both error shapes. Without it the callable no-context
@@ -1048,11 +1058,92 @@ export type ErrorMapper<
 > = (error: Error) => Err<Kinds, Partial<T>, N>
 
 /**
+ * Renders a thrown non-`Error` value for an error message: strings as-is, objects as
+ * JSON (cycles become "[Circular]", bigints become strings), anything else with
+ * `String()`. Falls back to the `Object.prototype.toString` tag when JSON can't
+ * represent the value.
+ *
+ * @internal
+ */
+const renderThrown = (value: unknown): string => {
+  if (typeof value === "string") {
+    return value
+  }
+  if (typeof value !== "object" || value === null) {
+    return String(value)
+  }
+  const seen = new WeakSet<object>()
+  try {
+    const json = JSON.stringify(value, (_key, item: unknown) => {
+      if (typeof item === "bigint") {
+        return item.toString()
+      }
+      if (typeof item === "object" && item !== null) {
+        if (seen.has(item)) {
+          return "[Circular]"
+        }
+        seen.add(item)
+      }
+      return item
+    })
+    if (typeof json === "string") {
+      return json
+    }
+  } catch {
+    // e.g. a throwing toJSON; use the tag below
+  }
+  return Object.prototype.toString.call(value)
+}
+
+/** Normalizes a caught value for the mapper: `Error`s as-is, anything else wrapped. @internal */
+const toCaughtError = (caught: unknown): Error =>
+  caught instanceof Error ? caught : new Error(renderThrown(caught))
+
+/**
+ * Attaches the caught value as `cause` to the mapper's error unless it already has one.
+ * The mapper's error is not modified: a callable no-context error is called with
+ * `{ cause }`, and an object error is copied with every property plus `cause`.
+ *
+ * @internal
+ */
+const withCaughtCause = <E>(mapped: E, caught: unknown): E => {
+  if (
+    !hasBrand(mapped) ||
+    (mapped as { cause?: unknown }).cause !== undefined
+  ) {
+    return mapped
+  }
+  if (typeof mapped === "function") {
+    return (mapped as (options: ErrorOptions) => E)({ cause: caught })
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(mapped)
+  const ordered: PropertyDescriptorMap = {}
+  for (const key of Reflect.ownKeys(descriptors)) {
+    ordered[key] = descriptors[
+      key as keyof typeof descriptors
+    ] as PropertyDescriptor
+    if (key === "data") {
+      ordered.cause = {
+        value: caught,
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      }
+    }
+  }
+  return Object.defineProperties(
+    Object.create(Object.getPrototypeOf(mapped) as object | null),
+    ordered
+  ) as E
+}
+
+/**
  * Wraps synchronous throwing code and converts exceptions to error set values.
  *
- * Returns the function result if no error is thrown.
- * Catches thrown errors, converts non-Error values to Error objects,
- * and passes them to the mapper to create an error set value.
+ * Returns the function result if no error is thrown. Otherwise the caught value is
+ * passed to the mapper (non-`Error` values are wrapped in an `Error` whose message
+ * renders them safely), and the original caught value becomes the mapped error's
+ * `cause` unless the mapper set one.
  *
  * @param fn - Synchronous function that might throw
  * @param mapper - Function to convert caught Error to error set value
@@ -1064,7 +1155,7 @@ export type ErrorMapper<
  *   () => db.querySync(sql),
  *   (e) => DbError.query_failed`Query failed: ${"message"}`({ sql, message: e.message })
  * )
- * // result is QueryResult | DbError
+ * // result is QueryResult | DbError; DbError(result) && result.cause is the original exception
  * ```
  */
 export function captureSync<
@@ -1078,19 +1169,18 @@ export function captureSync<
 ): T | Err<Kinds, Partial<Data>, N> {
   try {
     return fn()
-  } catch (error_) {
-    // Convert non-Error values to Error objects
-    const error = error_ instanceof Error ? error_ : new Error(String(error_))
-    return mapper(error)
+  } catch (caught) {
+    return withCaughtCause(mapper(toCaughtError(caught)), caught)
   }
 }
 
 /**
  * Wraps asynchronous throwing code and converts rejections to error set values.
  *
- * Returns the promise result if no error is thrown or rejected.
- * Catches thrown errors and promise rejections, converts non-Error values
- * to Error objects, and passes them to the mapper to create an error set value.
+ * Returns the awaited result if nothing throws or rejects. Otherwise the caught value
+ * is passed to the mapper (non-`Error` values are wrapped in an `Error` whose message
+ * renders them safely), and the original caught value becomes the mapped error's
+ * `cause` unless the mapper set one.
  *
  * @param fn - Async function that might throw or reject
  * @param mapper - Function to convert caught Error to error set value
@@ -1102,7 +1192,7 @@ export function captureSync<
  *   async () => await db.query(sql),
  *   (e) => DbError.query_failed`Query failed: ${"message"}`({ sql, message: e.message })
  * )
- * // result is QueryResult | DbError
+ * // result is QueryResult | DbError; DbError(result) && result.cause is the original exception
  * ```
  */
 export async function captureAsync<
@@ -1116,10 +1206,8 @@ export async function captureAsync<
 ): Promise<T | Err<Kinds, Partial<Data>, N>> {
   try {
     return await fn()
-  } catch (error_) {
-    // Convert non-Error values to Error objects
-    const error = error_ instanceof Error ? error_ : new Error(String(error_))
-    return mapper(error)
+  } catch (caught) {
+    return withCaughtCause(mapper(toCaughtError(caught)), caught)
   }
 }
 

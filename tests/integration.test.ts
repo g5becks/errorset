@@ -6,6 +6,7 @@
 
 import { describe, expect, it, mock } from "bun:test"
 import { type Err, errorSet, isErr } from "../src/index.ts"
+import { errCause } from "./support/err-cause.ts"
 
 // =============================================================================
 // Domain types for integration tests
@@ -47,8 +48,8 @@ describe("Error Chaining", () => {
       )
 
       expect(orderErr.cause).toBeDefined()
-      expect(orderErr.cause?.kind).toBe("not_found")
-      expect(orderErr.cause?.data).toEqual({ id: "U1" })
+      expect(errCause(orderErr.cause).kind).toBe("not_found")
+      expect(errCause(orderErr.cause).data).toEqual({ id: "U1" })
     })
 
     it("should preserve cause data integrity", () => {
@@ -61,11 +62,11 @@ describe("Error Chaining", () => {
         { cause: userErr }
       )
 
-      expect(orderErr.cause?.data).toEqual({
+      expect(errCause(orderErr.cause).data).toEqual({
         id: "U1",
         email: "test@example.com",
       })
-      expect(orderErr.cause?.message).toBe(
+      expect(errCause(orderErr.cause).message).toBe(
         "User U1 (test@example.com) suspended"
       )
     })
@@ -90,8 +91,8 @@ describe("Error Chaining", () => {
 
       // Verify chain
       expect(paymentErr.kind).toBe("failed")
-      expect(paymentErr.cause?.kind).toBe("not_found")
-      expect(paymentErr.cause?.cause?.kind).toBe("not_found")
+      expect(errCause(paymentErr.cause).kind).toBe("not_found")
+      expect(errCause(errCause(paymentErr.cause).cause).kind).toBe("not_found")
     })
 
     it("should allow traversing the full chain", () => {
@@ -110,7 +111,7 @@ describe("Error Chaining", () => {
       let current: Err | undefined = paymentErr
       while (current) {
         chain.push(current)
-        current = current.cause
+        current = isErr(current.cause) ? current.cause : undefined
       }
 
       expect(chain).toHaveLength(3)
@@ -152,7 +153,7 @@ describe("Error Chaining", () => {
       // Each error in chain is from different set
       expect(PaymentError(paymentErr)).toBe(true)
       expect(OrderError(paymentErr.cause)).toBe(true)
-      expect(UserError(paymentErr.cause?.cause)).toBe(true)
+      expect(UserError(errCause(paymentErr.cause).cause)).toBe(true)
     })
   })
 })
@@ -252,7 +253,7 @@ describe("Real-World Workflows", () => {
 
       expect(UserServiceError(result)).toBe(true)
       expect((result as Err).kind).toBe("user_not_found")
-      expect((result as Err).cause?.kind).toBe("not_found")
+      expect(errCause((result as Err).cause).kind).toBe("not_found")
     })
 
     it("should transform connection errors to validation errors", () => {
@@ -260,7 +261,7 @@ describe("Real-World Workflows", () => {
 
       expect(UserServiceError(result)).toBe(true)
       expect((result as Err).kind).toBe("validation_failed")
-      expect((result as Err).cause?.kind).toBe("connection_failed")
+      expect(errCause((result as Err).cause).kind).toBe("connection_failed")
     })
 
     it("should return success value when no error", () => {

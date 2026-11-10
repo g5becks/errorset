@@ -5,6 +5,7 @@
 
 import { describe, expect, it } from "bun:test"
 import { errorSet, isErr } from "../src/index.ts"
+import { errCause } from "./support/err-cause.ts"
 
 describe("errorSet Factory", () => {
   type User = { id: string; name: string; email: string }
@@ -256,7 +257,7 @@ describe("errorSet no-context (callable) errors", () => {
 
     expect(err.kind).toBe("config_invalid")
     expect(err.message).toBe("S3 configuration is required")
-    expect(err.cause?.kind).toBe("download_failed")
+    expect(errCause(err.cause).kind).toBe("download_failed")
     expect(isErr(err)).toBe(true)
 
     // Verify the error created via call has its own inspect function
