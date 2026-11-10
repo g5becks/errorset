@@ -422,3 +422,64 @@ const Merged = OrderErrors.merge(PositionErrors)
 if (Merged(either)) {
   expectTypeOf(either.set).toEqualTypeOf<"OrderError" | "PositionError">()
 }
+
+// =============================================================================
+// Exhaustive recover (0.4.0, audit A10)
+// =============================================================================
+
+const Payment = errorSet("PaymentError", [
+  "declined",
+  "expired",
+  "fraud",
+]).init<{ id: string }>()
+declare const payment: string | typeof Payment.Type
+
+// Every kind handled: compiles; result is the success type or the handlers' type
+const recoveredAll = Payment.recover(payment, {
+  declined: () => "d",
+  expired: () => "e",
+  fraud: () => "f",
+})
+expectTypeOf(recoveredAll).toEqualTypeOf<string>()
+
+// Partial map plus the "_" catch-all: compiles
+const recoveredPartial = Payment.recover(payment, {
+  declined: () => 1,
+  _: () => 0,
+})
+expectTypeOf(recoveredPartial).toEqualTypeOf<string | number>()
+
+// Catch-all only: compiles
+expectTypeOf(Payment.recover(payment, { _: () => null })).toEqualTypeOf<
+  string | null
+>()
+
+// Every kind plus "_": compiles
+expectTypeOf(
+  Payment.recover(payment, {
+    declined: () => "d",
+    expired: () => "e",
+    fraud: () => "f",
+    _: () => "x",
+  })
+).toEqualTypeOf<string>()
+
+// @ts-expect-error - {} handles nothing
+Payment.recover(payment, {})
+
+// @ts-expect-error - a partial map without "_" is not exhaustive
+Payment.recover(payment, { declined: () => "d", expired: () => "e" })
+
+Payment.recover(payment, {
+  declined: () => "d",
+  expired: () => "e",
+  fraud: () => "f",
+  // @ts-expect-error - "refunded" is not a PaymentError kind
+  refunded: () => "r",
+})
+
+Payment.recover(payment, {
+  _: () => "x",
+  // @ts-expect-error - unknown kind keys are rejected next to "_" too
+  chargeback: () => "c",
+})

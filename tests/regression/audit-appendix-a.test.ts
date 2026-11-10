@@ -208,17 +208,22 @@ describe("A9 merge duplicates kinds (v0.5.0)", () => {
 })
 
 describe("A10 non-exhaustive recover", () => {
-  test.failing("A10 [TASK-056] recover with an empty or partial handler map does not type-check", async () => {
-    const result = await typeCheck(`
-const E = errorSet("E", ["boom", "bust"]).init<{ id: string }>()
-const err = E.boom\`id \${"id"}\`({ id: "1" })
-const value: string | typeof err = err
-export const empty = E.recover(value, {})
-export const partial = E.recover(value, { boom: () => "x" })
-`)
+  test("A10 [TASK-056] recover with an empty or partial handler map does not type-check", async () => {
+    const body = [
+      'const E = errorSet("E", ["boom", "bust"]).init<{ id: string }>()',
+      `const err = E.boom\`id \${"id"}\`({ id: "1" })`,
+      "const value: string | typeof err = err",
+      "export const empty = E.recover(value, {})",
+      'export const partial = E.recover(value, { boom: () => "x" })',
+    ]
+    const result = await typeCheck(body.join("\n"))
+    // probe.ts line = 1 (import) + 1-based index in body
+    const lineOf = (needle: string): number =>
+      body.findIndex(line => line.includes(needle)) + 2
     expect(result.ok).toBe(false)
-    expect(result.output).toContain("probe.ts(5,")
-    expect(result.output).toContain("probe.ts(6,")
+    expect(result.output).toContain(`probe.ts(${lineOf("recover(value, {})")},`)
+    expect(result.output).toContain(`probe.ts(${lineOf("{ boom:")},`)
+    expect(result.output.match(/error TS/gu)?.length).toBe(2)
   }, 30_000)
 })
 

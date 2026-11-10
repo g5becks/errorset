@@ -358,6 +358,11 @@ const user = UserError.recover(result, {
 });
 ```
 
+Recovery is exhaustive and checked by the compiler: handle every kind of the set, or handle
+some kinds and add the `_` catch-all. `recover(result, {})`, a partial map without `_`, and
+unknown kind keys are type errors, so `recover` never throws from typed code. (Untyped callers
+that skip both get a clear runtime error naming the set and kind.)
+
 ### `inspect` — Side Effects Only
 
 Observe errors for logging/metrics without changing control flow:

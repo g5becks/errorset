@@ -735,20 +735,26 @@ export type RecoverHandler<
 > = (error: Err<Kind, Partial<T>, N>) => R
 
 /**
- * Handlers object for recover method.
- * Maps error kinds to handler functions, with optional catch-all.
+ * Handlers object for recover: recovery is exhaustive.
+ *
+ * Either every kind has a handler (the `_` catch-all is then optional), or the map is
+ * partial and the `_` catch-all is required. `{}` or a partial map without `_` does not
+ * type-check, and unknown kind keys are rejected.
  */
 export type RecoverHandlers<
   Kinds extends string,
   T extends Record<string, unknown>,
   R,
   N extends string = string,
-> = {
-  [K in Kinds]?: RecoverHandler<K, T, R, N>
-} & {
-  /** Catch-all handler for any unmatched error kind */
-  _?: RecoverHandler<Kinds, T, R, N>
-}
+> =
+  | ({ [K in Kinds]: RecoverHandler<K, T, R, N> } & {
+      /** Catch-all handler for any unmatched error kind */
+      _?: RecoverHandler<Kinds, T, R, N>
+    })
+  | ({ [K in Kinds]?: RecoverHandler<K, T, R, N> } & {
+      /** Catch-all handler for any unmatched error kind */
+      _: RecoverHandler<Kinds, T, R, N>
+    })
 
 /**
  * Provides expression-style error handling with guaranteed recovery.
@@ -791,22 +797,20 @@ export function recover<
   const error = value
   const { kind } = error
 
-  // Try specific handler first
-  const specificHandler = handlers[kind]
-  if (specificHandler !== undefined) {
-    return specificHandler(error)
+  // Look up the specific handler, then the catch-all
+  const byKind = handlers as Partial<
+    Record<Kinds | "_", RecoverHandler<Kinds, T, R, N>>
+  >
+  const handler = byKind[kind] ?? byKind._
+  if (handler !== undefined) {
+    return handler(error)
   }
 
-  // Fall back to catch-all handler
-  const catchAllHandler = handlers._
-  if (catchAllHandler !== undefined) {
-    return catchAllHandler(error)
-  }
-
-  // No handler found - throw
+  // Unreachable from typed code: RecoverHandlers requires every kind or a "_" catch-all.
+  // Kept as a defensive branch for untyped callers (JavaScript, casts).
   throw new Error(
-    `No handler found for error kind: ${kind}. ` +
-      `Provide a handler for "${kind}" or a catch-all "_" handler.`
+    `errorset: recover() has no handler for "${error.set}.${kind}". ` +
+      `Handle every kind of the set or provide a "_" catch-all handler.`
   )
 }
 

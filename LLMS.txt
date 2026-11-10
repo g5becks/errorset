@@ -285,19 +285,21 @@ Expression-style error handling with guaranteed recovery.
 **Signature:**
 ```typescript
 recover<Success, R>(
-  value: Success | Err<Kinds, Partial<T>>,
-  handlers: {
-    [K in Kinds]?: (error: Err<K, Partial<T>>) => R;
-    _?: (error: Err<Kinds, Partial<T>>) => R;  // Catch-all
-  }
+  value: Success | Err<Kinds, Partial<T>, SetName>,
+  handlers:
+    // Exhaustive: every kind (catch-all optional) ...
+    | { [K in Kinds]: (error: Err<K, Partial<T>, SetName>) => R } & { _?: (error: Err<Kinds, Partial<T>, SetName>) => R }
+    // ... or some kinds plus a required catch-all
+    | { [K in Kinds]?: (error: Err<K, Partial<T>, SetName>) => R } & { _: (error: Err<Kinds, Partial<T>, SetName>) => R }
 ): Success | R
 ```
 
 **Behavior:**
-- Returns success value unchanged if not an error
-- Applies matching handler for error kind
-- Falls back to `_` catch-all handler if no specific match
-- Throws if no matching handler found
+- Returns the value unchanged if it is not an error of this set
+- Applies the matching handler for the error kind
+- Falls back to the `_` catch-all handler if no specific match
+- `{}`, a partial map without `_`, and unknown kind keys are compile errors; only untyped
+  callers can reach the runtime error for a missing handler
 
 **Example:**
 ```typescript
