@@ -1,3 +1,57 @@
+# errorset: agent instructions
+
+This is the single source of instructions for coding agents in this repository.
+`CLAUDE.md`, `GEMINI.md`, `.claude/CLAUDE.md` and `.github/copilot-instructions.md`
+only point here.
+
+## Project
+
+errorset is a Zig-inspired, type-safe error-set library for TypeScript, published to
+npm as `@takinprofit/errorset`. Source is in `src/`, tests in `tests/` (runtime) and
+`tests/types/` (type tests), benchmarks in `bench/`, scripts in `scripts/`.
+`errorset-audit.md` is the 2026-11 audit that backlog tasks cite by finding ID.
+
+## Toolchain
+
+- Use Bun, not Node or npm: `bun install`, `bun test`, `bun run <script>`, `bunx <tool>`.
+  Use npm only for read-only queries such as `npm view`.
+- TypeScript is pinned as a devDependency; scripts call `tsc` directly.
+- Bun loads `.env` automatically; don't add dotenv.
+
+## Quality gate
+
+Run all of these before committing; every step must pass:
+
+```bash
+bun run typecheck && bun run lint && bun test && bun run build && bun run test:types && bun run test:consumer
+bunx -p typescript@5.9.3 tsc --noEmit && bunx -p typescript@6.0.3 tsc --noEmit
+```
+
+- `bun test` enforces the coverage thresholds in `bunfig.toml`; never lower them.
+- Never weaken, skip or delete tests to make the gate pass. Add a regression test before a fix.
+- lefthook runs `ultracite fix` on pre-commit and typecheck + tests on pre-push; never bypass hooks.
+
+## CI
+
+- `.github/workflows/ci.yml` is the CI definition. `scripts/ci-local.sh [ref]` runs the same
+  jobs locally (macOS on the host, Linux in Docker via Colima) and must print `RESULT: PASS`.
+- Any change to `ci.yml` must be mirrored in `scripts/ci-local.sh` in the same commit.
+  Validate workflows with `bunx --bun actionlint`.
+- While GitHub Actions is unavailable (billing lock), never claim a GitHub run happened;
+  record "Verified with scripts/ci-local.sh (<sha>, PASS)" instead.
+
+## Releases
+
+Prepare releases on `release/vX.Y.Z` branches with a verified tarball, tag and release notes.
+The maintainer publishes to npm (interactive 2FA): agents never run `npm publish`, `npm login`
+or any other npm write command.
+
+## Backlog
+
+Tasks are managed with the project-local Backlog.md CLI. Always run it as `bunx backlog …`
+(a global `backlog` binary may be a different package), add `--plain` when reading, and never
+edit files under `backlog/` by hand. The full guide follows.
+
 
 <!-- BACKLOG.MD GUIDELINES START -->
 # Instructions for the usage of Backlog.md CLI Tool
@@ -12,9 +66,9 @@ remains fully synchronized and up-to-date.
 ### Core Capabilities
 
 - ✅ **Task Management**: Create, edit, assign, prioritize, and track tasks with full metadata
-- ✅ **Search**: Fuzzy search across tasks, documents, and decisions with `backlog search`
+- ✅ **Search**: Fuzzy search across tasks, documents, and decisions with `bunx backlog search`
 - ✅ **Acceptance Criteria**: Granular control with add/remove/check/uncheck by index
-- ✅ **Board Visualization**: Terminal-based Kanban board (`backlog board`) and web UI (`backlog browser`)
+- ✅ **Board Visualization**: Terminal-based Kanban board (`bunx backlog board`) and web UI (`bunx backlog browser`)
 - ✅ **Git Integration**: Automatic tracking of task states across branches
 - ✅ **Dependencies**: Task relationships and subtask hierarchies
 - ✅ **Documentation & Decisions**: Structured docs and architectural decision records
@@ -25,14 +79,14 @@ remains fully synchronized and up-to-date.
 
 1. **Comprehensive system** - Full project management capabilities through CLI
 2. **The CLI is the interface** - All operations go through `backlog` commands
-3. **Unified interaction model** - You can use CLI for both reading (`backlog task 1 --plain`) and writing (
-   `backlog task edit 1`)
+3. **Unified interaction model** - You can use CLI for both reading (`bunx backlog task 1 --plain`) and writing (
+   `bunx backlog task edit 1`)
 4. **Metadata stays synchronized** - The CLI handles all the complex relationships
 
 ### Key Understanding
 
 - **Tasks** live in `backlog/tasks/` as `task-<id> - <title>.md` files
-- **You interact via CLI only**: `backlog task create`, `backlog task edit`, etc.
+- **You interact via CLI only**: `bunx backlog task create`, `bunx backlog task edit`, etc.
 - **Use `--plain` flag** for AI-friendly output when viewing/listing
 - **Never bypass the CLI** - It handles Git, metadata, file naming, and relationships
 
@@ -42,9 +96,9 @@ remains fully synchronized and up-to-date.
 
 **ALL task operations MUST use the Backlog.md CLI commands**
 
-- ✅ **DO**: Use `backlog task edit` and other CLI commands
-- ✅ **DO**: Use `backlog task create` to create new tasks
-- ✅ **DO**: Use `backlog task edit <id> --check-ac <index>` to mark acceptance criteria
+- ✅ **DO**: Use `bunx backlog task edit` and other CLI commands
+- ✅ **DO**: Use `bunx backlog task create` to create new tasks
+- ✅ **DO**: Use `bunx backlog task edit <id> --check-ac <index>` to mark acceptance criteria
 - ❌ **DON'T**: Edit markdown files directly
 - ❌ **DON'T**: Manually change checkboxes in files
 - ❌ **DON'T**: Add or modify text in task files without using CLI
@@ -87,9 +141,9 @@ remains fully synchronized and up-to-date.
 
 ```bash
 # DO THIS INSTEAD:
-backlog task edit 7 --check-ac 1  # Mark AC #1 as complete
-backlog task edit 7 --notes "Implementation complete"  # Add notes
-backlog task edit 7 -s "In Progress" -a @agent-k  # Multiple commands: change status and assign the task when you start working on the task
+bunx backlog task edit 7 --check-ac 1  # Mark AC #1 as complete
+bunx backlog task edit 7 --notes "Implementation complete"  # Add notes
+bunx backlog task edit 7 -s "In Progress" -a @agent-k  # Multiple commands: change status and assign the task when you start working on the task
 ```
 
 ---
@@ -138,18 +192,18 @@ Summary of what was done.
 
 | What You Want to Change | CLI Command to Use                                       |
 |-------------------------|----------------------------------------------------------|
-| Title                   | `backlog task edit 42 -t "New Title"`                    |
-| Status                  | `backlog task edit 42 -s "In Progress"`                  |
-| Assignee                | `backlog task edit 42 -a @sara`                          |
-| Labels                  | `backlog task edit 42 -l backend,api`                    |
-| Description             | `backlog task edit 42 -d "New description"`              |
-| Add AC                  | `backlog task edit 42 --ac "New criterion"`              |
-| Check AC #1             | `backlog task edit 42 --check-ac 1`                      |
-| Uncheck AC #2           | `backlog task edit 42 --uncheck-ac 2`                    |
-| Remove AC #3            | `backlog task edit 42 --remove-ac 3`                     |
-| Add Plan                | `backlog task edit 42 --plan "1. Step one\n2. Step two"` |
-| Add Notes (replace)     | `backlog task edit 42 --notes "What I did"`              |
-| Append Notes            | `backlog task edit 42 --append-notes "Another note"` |
+| Title                   | `bunx backlog task edit 42 -t "New Title"`                    |
+| Status                  | `bunx backlog task edit 42 -s "In Progress"`                  |
+| Assignee                | `bunx backlog task edit 42 -a @sara`                          |
+| Labels                  | `bunx backlog task edit 42 -l backend,api`                    |
+| Description             | `bunx backlog task edit 42 -d "New description"`              |
+| Add AC                  | `bunx backlog task edit 42 --ac "New criterion"`              |
+| Check AC #1             | `bunx backlog task edit 42 --check-ac 1`                      |
+| Uncheck AC #2           | `bunx backlog task edit 42 --uncheck-ac 2`                    |
+| Remove AC #3            | `bunx backlog task edit 42 --remove-ac 3`                     |
+| Add Plan                | `bunx backlog task edit 42 --plan "1. Step one\n2. Step two"` |
+| Add Notes (replace)     | `bunx backlog task edit 42 --notes "What I did"`              |
+| Append Notes            | `bunx backlog task edit 42 --append-notes "Another note"` |
 
 ---
 
@@ -161,7 +215,7 @@ Summary of what was done.
 
 ```bash
 # Example
-backlog task create "Task title" -d "Description" --ac "First criterion" --ac "Second criterion"
+bunx backlog task create "Task title" -d "Description" --ac "First criterion" --ac "Second criterion"
 ```
 
 ### Title (one liner)
@@ -191,25 +245,25 @@ Provide a concise summary of the task purpose and its goal. Explains the context
 # Examples
 
 # Add new criteria (MULTIPLE values allowed)
-backlog task edit 42 --ac "User can login" --ac "Session persists"
+bunx backlog task edit 42 --ac "User can login" --ac "Session persists"
 
 # Check specific criteria by index (MULTIPLE values supported)
-backlog task edit 42 --check-ac 1 --check-ac 2 --check-ac 3  # Check multiple ACs
+bunx backlog task edit 42 --check-ac 1 --check-ac 2 --check-ac 3  # Check multiple ACs
 # Or check them individually if you prefer:
-backlog task edit 42 --check-ac 1    # Mark #1 as complete
-backlog task edit 42 --check-ac 2    # Mark #2 as complete
+bunx backlog task edit 42 --check-ac 1    # Mark #1 as complete
+bunx backlog task edit 42 --check-ac 2    # Mark #2 as complete
 
 # Mixed operations in single command
-backlog task edit 42 --check-ac 1 --uncheck-ac 2 --remove-ac 3
+bunx backlog task edit 42 --check-ac 1 --uncheck-ac 2 --remove-ac 3
 
 # ❌ STILL WRONG - These formats don't work:
-# backlog task edit 42 --check-ac 1,2,3  # No comma-separated values
-# backlog task edit 42 --check-ac 1-3    # No ranges
-# backlog task edit 42 --check 1         # Wrong flag name
+# bunx backlog task edit 42 --check-ac 1,2,3  # No comma-separated values
+# bunx backlog task edit 42 --check-ac 1-3    # No ranges
+# bunx backlog task edit 42 --check 1         # Wrong flag name
 
 # Multiple operations of same type
-backlog task edit 42 --uncheck-ac 1 --uncheck-ac 2  # Uncheck multiple ACs
-backlog task edit 42 --remove-ac 2 --remove-ac 4    # Remove multiple ACs (processed high-to-low)
+bunx backlog task edit 42 --uncheck-ac 1 --uncheck-ac 2  # Uncheck multiple ACs
+bunx backlog task edit 42 --remove-ac 2 --remove-ac 4    # Remove multiple ACs (processed high-to-low)
 ```
 
 **Key Principles for Good ACs:**
@@ -258,7 +312,7 @@ The very first things you must do when you take over a task are:
 
 ```bash
 # Example
-backlog task edit 42 -s "In Progress" -a @{myself}
+bunx backlog task edit 42 -s "In Progress" -a @{myself}
 ```
 
 ### 5.2. Create an Implementation Plan (The "how")
@@ -271,7 +325,7 @@ When you are ready, write it down in the task so that you can refer to it later.
 
 ```bash
 # Example
-backlog task edit 42 --plan "1. Research codebase for references\n2Research on internet for similar cases\n3. Implement\n4. Test"
+bunx backlog task edit 42 --plan "1. Research codebase for references\n2Research on internet for similar cases\n3. Implement\n4. Test"
 ```
 
 ## 5.3. Implementation
@@ -287,12 +341,12 @@ Because you cannot create PRs directly, write the PR as a clean description in t
 Append notes progressively during implementation using `--append-notes`:
 
 ```
-backlog task edit 42 --append-notes "Implemented X" --append-notes "Added tests"
+bunx backlog task edit 42 --append-notes "Implemented X" --append-notes "Added tests"
 ```
 
 ```bash
 # Example
-backlog task edit 42 --notes "Implemented using pattern X because Reason Y, modified files Z and W"
+bunx backlog task edit 42 --notes "Implemented using pattern X because Reason Y, modified files Z and W"
 ```
 
 **IMPORTANT**: Do NOT include an Implementation Plan when creating a task. The plan is added only after you start the
@@ -300,10 +354,10 @@ implementation.
 
 - Creation phase: provide Title, Description, Acceptance Criteria, and optionally labels/priority/assignee.
 - When you begin work, switch to edit, set the task in progress and assign to yourself
-  `backlog task edit <id> -s "In Progress" -a "..."`.
-- Think about how you would solve the task and add the plan: `backlog task edit <id> --plan "..."`.
+  `bunx backlog task edit <id> -s "In Progress" -a "..."`.
+- Think about how you would solve the task and add the plan: `bunx backlog task edit <id> --plan "..."`.
 - After updating the plan, share it with the user and ask for confirmation. Do not begin coding until the user approves the plan or explicitly tells you to skip the review.
-- Add Implementation Notes only after completing the work: `backlog task edit <id> --notes "..."` (replace) or append progressively using `--append-notes`.
+- Add Implementation Notes only after completing the work: `bunx backlog task edit <id> --notes "..."` (replace) or append progressively using `--append-notes`.
 
 ## Phase discipline: What goes where
 
@@ -313,8 +367,8 @@ implementation.
 
 **IMPORTANT**: Only implement what's in the Acceptance Criteria. If you need to do more, either:
 
-1. Update the AC first: `backlog task edit 42 --ac "New requirement"`
-2. Or create a new follow up task: `backlog task create "Additional feature"`
+1. Update the AC first: `bunx backlog task edit 42 --ac "New requirement"`
+2. Or create a new follow up task: `bunx backlog task create "Additional feature"`
 
 ---
 
@@ -322,33 +376,33 @@ implementation.
 
 ```bash
 # 1. Identify work
-backlog task list -s "To Do" --plain
+bunx backlog task list -s "To Do" --plain
 
 # 2. Read task details
-backlog task 42 --plain
+bunx backlog task 42 --plain
 
 # 3. Start work: assign yourself & change status
-backlog task edit 42 -s "In Progress" -a @myself
+bunx backlog task edit 42 -s "In Progress" -a @myself
 
 # 4. Add implementation plan
-backlog task edit 42 --plan "1. Analyze\n2. Refactor\n3. Test"
+bunx backlog task edit 42 --plan "1. Analyze\n2. Refactor\n3. Test"
 
 # 5. Share the plan with the user and wait for approval (do not write code yet)
 
 # 6. Work on the task (write code, test, etc.)
 
 # 7. Mark acceptance criteria as complete (supports multiple in one command)
-backlog task edit 42 --check-ac 1 --check-ac 2 --check-ac 3  # Check all at once
+bunx backlog task edit 42 --check-ac 1 --check-ac 2 --check-ac 3  # Check all at once
 # Or check them individually if preferred:
-# backlog task edit 42 --check-ac 1
-# backlog task edit 42 --check-ac 2
-# backlog task edit 42 --check-ac 3
+# bunx backlog task edit 42 --check-ac 1
+# bunx backlog task edit 42 --check-ac 2
+# bunx backlog task edit 42 --check-ac 3
 
 # 8. Add implementation notes (PR Description)
-backlog task edit 42 --notes "Refactored using strategy pattern, updated tests"
+bunx backlog task edit 42 --notes "Refactored using strategy pattern, updated tests"
 
 # 9. Mark task as done
-backlog task edit 42 -s Done
+bunx backlog task edit 42 -s Done
 ```
 
 ---
@@ -359,9 +413,9 @@ A task is **Done** only when **ALL** of the following are complete:
 
 ### ✅ Via CLI Commands:
 
-1. **All acceptance criteria checked**: Use `backlog task edit <id> --check-ac <index>` for each
-2. **Implementation notes added**: Use `backlog task edit <id> --notes "..."`
-3. **Status set to Done**: Use `backlog task edit <id> -s Done`
+1. **All acceptance criteria checked**: Use `bunx backlog task edit <id> --check-ac <index>` for each
+2. **Implementation notes added**: Use `bunx backlog task edit <id> --notes "..."`
+3. **Status set to Done**: Use `bunx backlog task edit <id> -s Done`
 
 ### ✅ Via Code/Testing:
 
@@ -376,18 +430,18 @@ A task is **Done** only when **ALL** of the following are complete:
 
 ## 8. Finding Tasks and Content with Search
 
-When users ask you to find tasks related to a topic, use the `backlog search` command with `--plain` flag:
+When users ask you to find tasks related to a topic, use the `bunx backlog search` command with `--plain` flag:
 
 ```bash
 # Search for tasks about authentication
-backlog search "auth" --plain
+bunx backlog search "auth" --plain
 
 # Search only in tasks (not docs/decisions)
-backlog search "login" --type task --plain
+bunx backlog search "login" --type task --plain
 
 # Search with filters
-backlog search "api" --status "In Progress" --plain
-backlog search "bug" --priority high --plain
+bunx backlog search "api" --status "In Progress" --plain
+bunx backlog search "bug" --priority high --plain
 ```
 
 **Key points:**
@@ -404,19 +458,19 @@ backlog search "bug" --priority high --plain
 
 | Task         | ✅ DO                        | ❌ DON'T                         |
 |--------------|-----------------------------|---------------------------------|
-| View task    | `backlog task 42 --plain`   | Open and read .md file directly |
-| List tasks   | `backlog task list --plain` | Browse backlog/tasks folder     |
-| Check status | `backlog task 42 --plain`   | Look at file content            |
-| Find by topic| `backlog search "auth" --plain` | Manually grep through files |
+| View task    | `bunx backlog task 42 --plain`   | Open and read .md file directly |
+| List tasks   | `bunx backlog task list --plain` | Browse backlog/tasks folder     |
+| Check status | `bunx backlog task 42 --plain`   | Look at file content            |
+| Find by topic| `bunx backlog search "auth" --plain` | Manually grep through files |
 
 ### Modifying Tasks
 
 | Task          | ✅ DO                                 | ❌ DON'T                           |
 |---------------|--------------------------------------|-----------------------------------|
-| Check AC      | `backlog task edit 42 --check-ac 1`  | Change `- [ ]` to `- [x]` in file |
-| Add notes     | `backlog task edit 42 --notes "..."` | Type notes into .md file          |
-| Change status | `backlog task edit 42 -s Done`       | Edit status in frontmatter        |
-| Add AC        | `backlog task edit 42 --ac "New"`    | Add `- [ ] New` to file           |
+| Check AC      | `bunx backlog task edit 42 --check-ac 1`  | Change `- [ ]` to `- [x]` in file |
+| Add notes     | `bunx backlog task edit 42 --notes "..."` | Type notes into .md file          |
+| Change status | `bunx backlog task edit 42 -s Done`       | Edit status in frontmatter        |
+| Add AC        | `bunx backlog task edit 42 --ac "New"`    | Add `- [ ] New` to file           |
 
 ---
 
@@ -426,57 +480,57 @@ backlog search "bug" --priority high --plain
 
 | Action           | Command                                                                             |
 |------------------|-------------------------------------------------------------------------------------|
-| Create task      | `backlog task create "Title"`                                                       |
-| With description | `backlog task create "Title" -d "Description"`                                      |
-| With AC          | `backlog task create "Title" --ac "Criterion 1" --ac "Criterion 2"`                 |
-| With all options | `backlog task create "Title" -d "Desc" -a @sara -s "To Do" -l auth --priority high` |
-| Create draft     | `backlog task create "Title" --draft`                                               |
-| Create subtask   | `backlog task create "Title" -p 42`                                                 |
+| Create task      | `bunx backlog task create "Title"`                                                       |
+| With description | `bunx backlog task create "Title" -d "Description"`                                      |
+| With AC          | `bunx backlog task create "Title" --ac "Criterion 1" --ac "Criterion 2"`                 |
+| With all options | `bunx backlog task create "Title" -d "Desc" -a @sara -s "To Do" -l auth --priority high` |
+| Create draft     | `bunx backlog task create "Title" --draft`                                               |
+| Create subtask   | `bunx backlog task create "Title" -p 42`                                                 |
 
 ### Task Modification
 
 | Action           | Command                                     |
 |------------------|---------------------------------------------|
-| Edit title       | `backlog task edit 42 -t "New Title"`       |
-| Edit description | `backlog task edit 42 -d "New description"` |
-| Change status    | `backlog task edit 42 -s "In Progress"`     |
-| Assign           | `backlog task edit 42 -a @sara`             |
-| Add labels       | `backlog task edit 42 -l backend,api`       |
-| Set priority     | `backlog task edit 42 --priority high`      |
+| Edit title       | `bunx backlog task edit 42 -t "New Title"`       |
+| Edit description | `bunx backlog task edit 42 -d "New description"` |
+| Change status    | `bunx backlog task edit 42 -s "In Progress"`     |
+| Assign           | `bunx backlog task edit 42 -a @sara`             |
+| Add labels       | `bunx backlog task edit 42 -l backend,api`       |
+| Set priority     | `bunx backlog task edit 42 --priority high`      |
 
 ### Acceptance Criteria Management
 
 | Action              | Command                                                                     |
 |---------------------|-----------------------------------------------------------------------------|
-| Add AC              | `backlog task edit 42 --ac "New criterion" --ac "Another"`                  |
-| Remove AC #2        | `backlog task edit 42 --remove-ac 2`                                        |
-| Remove multiple ACs | `backlog task edit 42 --remove-ac 2 --remove-ac 4`                          |
-| Check AC #1         | `backlog task edit 42 --check-ac 1`                                         |
-| Check multiple ACs  | `backlog task edit 42 --check-ac 1 --check-ac 3`                            |
-| Uncheck AC #3       | `backlog task edit 42 --uncheck-ac 3`                                       |
-| Mixed operations    | `backlog task edit 42 --check-ac 1 --uncheck-ac 2 --remove-ac 3 --ac "New"` |
+| Add AC              | `bunx backlog task edit 42 --ac "New criterion" --ac "Another"`                  |
+| Remove AC #2        | `bunx backlog task edit 42 --remove-ac 2`                                        |
+| Remove multiple ACs | `bunx backlog task edit 42 --remove-ac 2 --remove-ac 4`                          |
+| Check AC #1         | `bunx backlog task edit 42 --check-ac 1`                                         |
+| Check multiple ACs  | `bunx backlog task edit 42 --check-ac 1 --check-ac 3`                            |
+| Uncheck AC #3       | `bunx backlog task edit 42 --uncheck-ac 3`                                       |
+| Mixed operations    | `bunx backlog task edit 42 --check-ac 1 --uncheck-ac 2 --remove-ac 3 --ac "New"` |
 
 ### Task Content
 
 | Action           | Command                                                  |
 |------------------|----------------------------------------------------------|
-| Add plan         | `backlog task edit 42 --plan "1. Step one\n2. Step two"` |
-| Add notes        | `backlog task edit 42 --notes "Implementation details"`  |
-| Add dependencies | `backlog task edit 42 --dep task-1 --dep task-2`         |
+| Add plan         | `bunx backlog task edit 42 --plan "1. Step one\n2. Step two"` |
+| Add notes        | `bunx backlog task edit 42 --notes "Implementation details"`  |
+| Add dependencies | `bunx backlog task edit 42 --dep task-1 --dep task-2`         |
 
 ### Multi‑line Input (Description/Plan/Notes)
 
 The CLI preserves input literally. Shells do not convert `\n` inside normal quotes. Use one of the following to insert real newlines:
 
 - Bash/Zsh (ANSI‑C quoting):
-  - Description: `backlog task edit 42 --desc $'Line1\nLine2\n\nFinal'`
-  - Plan: `backlog task edit 42 --plan $'1. A\n2. B'`
-  - Notes: `backlog task edit 42 --notes $'Done A\nDoing B'`
-  - Append notes: `backlog task edit 42 --append-notes $'Progress update line 1\nLine 2'`
+  - Description: `bunx backlog task edit 42 --desc $'Line1\nLine2\n\nFinal'`
+  - Plan: `bunx backlog task edit 42 --plan $'1. A\n2. B'`
+  - Notes: `bunx backlog task edit 42 --notes $'Done A\nDoing B'`
+  - Append notes: `bunx backlog task edit 42 --append-notes $'Progress update line 1\nLine 2'`
 - POSIX portable (printf):
-  - `backlog task edit 42 --notes "$(printf 'Line1\nLine2')"`
+  - `bunx backlog task edit 42 --notes "$(printf 'Line1\nLine2')"`
 - PowerShell (backtick n):
-  - `backlog task edit 42 --notes "Line1`nLine2"`
+  - `bunx backlog task edit 42 --notes "Line1`nLine2"`
 
 Do not expect `"...\n..."` to become a newline. That passes the literal backslash + n to the CLI by design.
 
@@ -494,21 +548,21 @@ Descriptions support literal newlines; shell examples may show escaped `\\n`, bu
   newlines. Example:
 
   ```bash
-  backlog task edit 42 --append-notes $'- Added new API endpoint\n- Updated tests\n- TODO: monitor staging deploy'
+  bunx backlog task edit 42 --append-notes $'- Added new API endpoint\n- Updated tests\n- TODO: monitor staging deploy'
   ```
 
 ### Task Operations
 
 | Action             | Command                                      |
 |--------------------|----------------------------------------------|
-| View task          | `backlog task 42 --plain`                    |
-| List tasks         | `backlog task list --plain`                  |
-| Search tasks       | `backlog search "topic" --plain`              |
-| Search with filter | `backlog search "api" --status "To Do" --plain` |
-| Filter by status   | `backlog task list -s "In Progress" --plain` |
-| Filter by assignee | `backlog task list -a @sara --plain`         |
-| Archive task       | `backlog task archive 42`                    |
-| Demote to draft    | `backlog task demote 42`                     |
+| View task          | `bunx backlog task 42 --plain`                    |
+| List tasks         | `bunx backlog task list --plain`                  |
+| Search tasks       | `bunx backlog search "topic" --plain`              |
+| Search with filter | `bunx backlog search "api" --status "To Do" --plain` |
+| Filter by status   | `bunx backlog task list -s "In Progress" --plain` |
+| Filter by assignee | `bunx backlog task list -a @sara --plain`         |
+| Archive task       | `bunx backlog task archive 42`                    |
+| Demote to draft    | `bunx backlog task demote 42`                     |
 
 ---
 
@@ -516,19 +570,19 @@ Descriptions support literal newlines; shell examples may show escaped `\\n`, bu
 
 | Problem              | Solution                                                           |
 |----------------------|--------------------------------------------------------------------|
-| Task not found       | Check task ID with `backlog task list --plain`                     |
-| AC won't check       | Use correct index: `backlog task 42 --plain` to see AC numbers     |
+| Task not found       | Check task ID with `bunx backlog task list --plain`                     |
+| AC won't check       | Use correct index: `bunx backlog task 42 --plain` to see AC numbers     |
 | Changes not saving   | Ensure you're using CLI, not editing files                         |
-| Metadata out of sync | Re-edit via CLI to fix: `backlog task edit 42 -s <current-status>` |
+| Metadata out of sync | Re-edit via CLI to fix: `bunx backlog task edit 42 -s <current-status>` |
 
 ---
 
 ## Remember: The Golden Rule
 
-**🎯 If you want to change ANYTHING in a task, use the `backlog task edit` command.**
+**🎯 If you want to change ANYTHING in a task, use the `bunx backlog task edit` command.**
 **📖 Use CLI to read tasks, exceptionally READ task files directly, never WRITE to them.**
 
-Full help available: `backlog --help`
+Full help available: `bunx backlog --help`
 
 <!-- BACKLOG.MD GUIDELINES END -->
 

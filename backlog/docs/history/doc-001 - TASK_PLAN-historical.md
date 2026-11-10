@@ -1,3 +1,14 @@
+---
+id: doc-001
+title: TASK_PLAN (historical)
+type: other
+created_date: '2026-11-10T19:27:00Z'
+updated_date: '2026-11-10T19:27:00Z'
+tags:
+  - history
+---
+> **Historical.** This is the original 38-task build plan for errorset (moved from the repository root `TASK_PLAN.md` in TASK-050). It is superseded by the Backlog.md tasks and milestones and is kept for reference only.
+
 # ErrorSet Implementation Task Plan
 
 ## Overview
@@ -183,6 +194,3 @@ A task is considered complete when:
 - All tasks follow the backlog workflow from AGENTS.md
 - Implementation plans are added when starting each task
 - Implementation notes are added when completing each task
-
-
-

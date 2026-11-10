@@ -3,9 +3,11 @@ id: TASK-050
 title: >-
   Hygiene: single agent-instructions source, archive TASK_PLAN, fold the
   playground tests
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@claude'
 created_date: '2026-11-10T17:35:00Z'
+updated_date: '2026-11-10T19:26:00Z'
 labels:
   - hygiene
 milestone: m-0
