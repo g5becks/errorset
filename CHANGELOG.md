@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Deprecated
 
+- `createKindFunction`, `createSetGuard` and `createSetGuardWithKinds`. They are internal helpers that were exported by mistake; they remain exported in 0.3.x and are removed from the public entry in 0.4.0. Use `errorSet(name, kinds).init<T>()`.
 - The `format` and `colors` configuration options (and the `Format` type). They never had any effect; `configure()` still accepts them, and they are removed in 0.4.0. Format errors in your logger with `JSON.stringify(err)` or `String(err)`.
 
 ### Changed

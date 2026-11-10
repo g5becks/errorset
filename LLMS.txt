@@ -722,8 +722,5 @@ export {
   merge,
   captureSync,
   captureAsync,
-  createKindFunction,
-  createSetGuard,
-  createSetGuardWithKinds,
 } from "@takinprofit/errorset";
 ```
