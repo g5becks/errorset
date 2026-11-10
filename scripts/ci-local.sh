@@ -4,10 +4,13 @@
 #
 # Runs the same jobs against a clean clone of a git ref (default: HEAD):
 #   check:      {linux (Docker oven/bun), macOS (host)} x {Bun 1.3.14, 1.4.4, latest}
-#               frozen install, lint, typecheck, test --coverage, build, test:types
+#               frozen install, lint, typecheck, test --coverage, build, test:types,
+#               test:consumer (SMOKE_NODE=skip)
 #   typescript: linux, Bun 1.4.4, tsc on source + type tests for TS 5.9.3, 6.0.3, 7.0.2
 #               (7.1.0-beta is advisory and never fails the run)
-#   node:       linux, build with Bun 1.4.4, then import dist/index.js on Node 22 and LTS
+#   node:       linux, build + packed consumer with Bun 1.4.4, then on Node 22 and LTS:
+#               import dist/index.js and run the packed consumer (ESM import + CJS require).
+#               ci.yml runs the same consumer files via SMOKE_NODE=require.
 #
 # Usage:   bash scripts/ci-local.sh [git-ref]
 # Env:     CI_LOCAL_DIR  work dir; must be inside $HOME so Colima can mount it
@@ -74,7 +77,8 @@ bun run lint
 bun run typecheck
 bun test --coverage
 bun run build
-bun run test:types'
+bun run test:types
+SMOKE_NODE=skip bun run test:consumer'
 
 mac_bun_dir() { # echo a directory containing a darwin bun binary of the given version
   local v="$1"
@@ -141,12 +145,14 @@ fi
 dir="$WORK/linux-node"; clone "$dir"
 echo "▶ node import"
 if docker run --rm -e CI=true -v "$dir:/w" -w /w "oven/bun:$BUN_PINNED" \
-     bash -c "set -e; $LINUX_PREP; bun install --frozen-lockfile; bun run build" >"$LOGS/node-build.log" 2>&1; then
+     bash -c "set -e; $LINUX_PREP; bun install --frozen-lockfile; SMOKE_NODE=skip SMOKE_KEEP=/w/.consumer bun run test:consumer" \
+     >"$LOGS/node-build.log" 2>&1; then
   for n in "${NODE_IMAGES[@]}"; do
     label="$n"; [[ "$n" == "lts" ]] && label="lts/*"
-    if docker run --rm -v "$dir:/w" -w /w "node:$n-slim" node scripts/node-import-check.mjs \
+    if docker run --rm -v "$dir:/w" -w /w "node:$n-slim" \
+         sh -c "node scripts/node-import-check.mjs && cd .consumer && node consumer.mjs && node consumer.cjs" \
          >"$LOGS/node-$n.log" 2>&1; then
-      record "node ($label, $(tail -1 "$LOGS/node-$n.log" | cut -d: -f1 | cut -d' ' -f2))" pass required
+      record "node ($label, $(head -1 "$LOGS/node-$n.log" | cut -d: -f1 | cut -d' ' -f2))" pass required
     else
       record "node ($label)" FAIL required
     fi

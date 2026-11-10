@@ -60,9 +60,10 @@
     "build:types": "tsc -p tsconfig.build.json",
     "test": "bun test",
     "test:types": "tsc --noEmit -p tests/types/tsconfig.json",
+    "test:consumer": "bun run build && bun scripts/smoke-consumer.ts",
     "lint": "bunx ultracite check --type-aware",
     "lint:fix": "bunx ultracite fix --type-aware",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "bun run typecheck && bun run test:types && bun run test && bun run build"
+    "prepublishOnly": "bun run typecheck && bun run test:types && bun run test && bun run test:consumer"
   }
 }

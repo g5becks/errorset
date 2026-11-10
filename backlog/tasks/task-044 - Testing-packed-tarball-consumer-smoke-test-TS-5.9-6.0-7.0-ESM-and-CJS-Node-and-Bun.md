@@ -3,9 +3,11 @@ id: TASK-044
 title: >-
   Testing: packed-tarball consumer smoke test (TS 5.9/6.0/7.0, ESM and CJS, Node
   and Bun)
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@claude'
 created_date: '2026-11-10T17:35:00Z'
+updated_date: '2026-11-10T18:26:00Z'
 labels:
   - testing
   - packaging
@@ -42,3 +44,14 @@ Port StrataDB's packed-consumer approach (`/Users/takinprofit/Dev/StrataDb/scrip
 - [ ] #4 Mutation check recorded: a broken types path or missing default condition makes test:consumer fail
 - [ ] #5 bash scripts/ci-local.sh HEAD prints RESULT: PASS
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. scripts/smoke-consumer.ts (ported from StrataDB): bun pm pack into a temp dir; fixtures installed with --production.
+2. Type-check consumer.ts (bundler; nodenext) and consumer.cts (nodenext CJS) on TS 5.9.3/6.0.3/7.0.2, skipLibCheck false, @ts-expect-error for a bad template key.
+3. Assert every path the packed package.json references exists (TS falls back to sibling .d.ts, so a broken types path is otherwise invisible).
+4. Runtime: consumer.mjs (import) and consumer.cjs (require) on Bun and Node: create, guard, recover.
+5. test:consumer script; ci.yml check (SMOKE_NODE=skip) and node job (SMOKE_NODE=require); ci-local mirrors via SMOKE_KEEP + node containers.
+6. Mutation checks: broken types path, removed default condition.
+<!-- SECTION:PLAN:END -->

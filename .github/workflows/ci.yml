@@ -34,6 +34,9 @@ jobs:
       - run: bun test --coverage
       - run: bun run build
       - run: bun run test:types
+      - run: bun run test:consumer
+        env:
+          SMOKE_NODE: skip
 
   typescript:
     strategy:
@@ -76,3 +79,6 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
       - run: node scripts/node-import-check.mjs
+      - run: bun run test:consumer
+        env:
+          SMOKE_NODE: require
