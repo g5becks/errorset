@@ -1,11 +1,11 @@
 ---
 id: TASK-052
 title: 'Release prep: v0.3.1 (verify, changelog, tag, tarball; maintainer publishes)'
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-11-10T17:35:00Z'
-updated_date: '2026-11-10T19:41:00Z'
+updated_date: '2026-11-10T19:49:00Z'
 labels:
   - release
 milestone: m-0
@@ -44,8 +44,8 @@ Release prep for v0.3.1 (non-breaking).
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [x] #1 All other v0.3.1 tasks are Done; [Unreleased] has no breaking changes
-- [ ] #2 release:prepare 0.3.1 produced commit, tag v0.3.1, ci-local PASS on tag and branch, a verified tarball, SHA-512 and RELEASE_NOTES.md
-- [ ] #3 Release PR merged without squash and tags pushed (if authorized); the npm publish commands are in the notes for the maintainer
+- [x] #2 release:prepare 0.3.1 produced commit, tag v0.3.1, ci-local PASS on tag and branch, a verified tarball, SHA-512 and RELEASE_NOTES.md
+- [x] #3 Release PR merged without squash and tags pushed (if authorized); the npm publish commands are in the notes for the maintainer
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -58,3 +58,19 @@ Release prep for v0.3.1 (non-breaking).
 5. switch main, pull --ff-only, verify v0.3.1 is an ancestor of main; push v0.3.1 and the retroactive tags v0.1.0, v0.2.1, v0.3.0.
 6. Notes: PR, merge commit, tag, tarball path, SHA-512, publish pending maintainer; Done; commit on main; push main. Create release/v0.4.0.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+- Outcome: v0.3.1 prepared, merged and tagged. npm publish pending maintainer (interactive 2FA).
+- [Unreleased] review: no breaking API changes; deprecations under Deprecated; sections reordered (Added, Changed, Deprecated, Fixed); the engines entry now says it is advisory. Re-verified that TS 7.0.2 and 5.9.3 emit byte-identical declarations.
+- release:prepare 0.3.1 (dry run first, then real): release commit 3767df2 "chore(release): prepare v0.3.1"; annotated tag v0.3.1 (object df1321d); ci-local on the tag: Verified with scripts/ci-local.sh (3767df2, PASS); ci-local on branch release/v0.3.1: Verified with scripts/ci-local.sh (3767df2, PASS) (separate CI_LOCAL_DIR). GitHub Actions unavailable (billing lock): PR checks failed with "The job was not started because your account is locked due to a billing issue" (0 steps).
+- Tarball: /Users/takinprofit/Dev/errorset-release/v0.3.1/takinprofit-errorset-0.3.1.tgz (7 files: package.json, LICENSE, README.md, dist/{index.js,index.d.ts,types.d.ts,config.d.ts}); SHA-512 c4eab6cda25cdff9b1d255012aeb6f76ee3fff2092bb21beb5c68fe052adce3c79878b955c3c815279ebd6f49e9f074d75ac8b032c671c5e160e528c09dbccf5 (identical to the TASK-051 rehearsal: reproducible). RELEASE_NOTES.md, SHA512SUMS and CI_LOCAL.log are in the same directory; consumers passed (ESM/CJS on Bun and Node).
+- PR https://github.com/g5becks/errorset/pull/1 (body: CHANGELOG section + task IDs; ci-local tables posted as a comment), merged with `gh pr merge 1 --merge` (no squash/rebase/admin): merge commit e9419adf761f08eed1eb1f79bb16a2b79df5ee21 at 2026-11-10T19:48:40Z. main fast-forwarded; v0.3.1, v0.3.0, v0.2.1, v0.1.0 verified ancestors of main.
+- Tags pushed: v0.1.0 (8d09ce5), v0.2.1 (301f969), v0.3.0 (a627c65), v0.3.1 (3767df2).
+- Maintainer commands:
+  cd /Users/takinprofit/Dev/errorset-release/v0.3.1 && npm publish ./takinprofit-errorset-0.3.1.tgz --access public
+  npm view @takinprofit/errorset@0.3.1 version
+  gh release create v0.3.1 --verify-tag --title v0.3.1 --notes-file /Users/takinprofit/Dev/errorset-release/v0.3.1/RELEASE_NOTES.md
+- npm publish pending maintainer (interactive 2FA).
+<!-- SECTION:NOTES:END -->
