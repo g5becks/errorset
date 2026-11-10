@@ -3,9 +3,11 @@ id: TASK-043
 title: >-
   Packaging: drop the TypeScript peer, add require() support, modern engines and
   package.json export
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@claude'
 created_date: '2026-11-10T17:35:00Z'
+updated_date: '2026-11-10T18:16:00Z'
 labels:
   - packaging
 milestone: m-0
@@ -45,3 +47,14 @@ Audit refs: D1, D4.
 - [ ] #5 CHANGELOG.md has an entry under ## [Unreleased] describing the change
 - [ ] #6 bash scripts/ci-local.sh HEAD prints RESULT: PASS
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Remove peerDependencies.typescript (decision: remove; the CI matrix proves TS 5.9/6.0/7.0 and the package ships only .d.ts).
+2. exports: "." {types, import, default} + "./package.json".
+3. engines: node >=22, bun >=1.3.14.
+4. Source maps: decide (none vs linked + src/); grep dist/index.js for Bun-only APIs and top-level await (which would break require(esm)).
+5. Pack with bun pm pack; in a temp dir install the tarball and require()/import it on Node 22, Node LTS (Docker) and Bun.
+6. CHANGELOG, quality gate, ci-local HEAD.
+<!-- SECTION:PLAN:END -->

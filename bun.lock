@@ -13,9 +13,6 @@
         "typescript": "~7.0.2",
         "ultracite": "7.0.8",
       },
-      "peerDependencies": {
-        "typescript": "^5",
-      },
     },
   },
   "packages": {
