@@ -3,11 +3,11 @@ id: TASK-048
 title: >-
   Config: implement includeTimestamp and deprecate the no-op format/colors
   options
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-11-10T17:35:00Z'
-updated_date: '2026-11-10T19:07:00Z'
+updated_date: '2026-11-10T19:14:00Z'
 labels:
   - config
 milestone: m-0
@@ -34,11 +34,11 @@ type: bug
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 configure({ includeTimestamp: true }) and init({ includeTimestamp: true }) set a numeric timestamp on both error shapes; when false the property is absent (tests)
-- [ ] #2 format and colors carry @deprecated JSDoc stating they have no effect and are removed in 0.4.0
-- [ ] #3 README and LLMS.txt configuration docs list only working options and mark the deprecated ones
-- [ ] #4 CHANGELOG.md has an entry under ## [Unreleased] describing the change
-- [ ] #5 bash scripts/ci-local.sh HEAD prints RESULT: PASS
+- [x] #1 configure({ includeTimestamp: true }) and init({ includeTimestamp: true }) set a numeric timestamp on both error shapes; when false the property is absent (tests)
+- [x] #2 format and colors carry @deprecated JSDoc stating they have no effect and are removed in 0.4.0
+- [x] #3 README and LLMS.txt configuration docs list only working options and mark the deprecated ones
+- [x] #4 CHANGELOG.md has an entry under ## [Unreleased] describing the change
+- [x] #5 bash scripts/ci-local.sh HEAD prints RESULT: PASS
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -50,3 +50,15 @@ type: bug
 4. Fix README and LLMS.txt configuration sections; CHANGELOG.
 5. Gate, bench, ci-local.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+- Outcome: includeTimestamp implemented globally and per set. A new internal applyCreationConfig() resolves the effective config once per creation (global merged with the set config) and applies both timestamp and stack capture (captureStack now takes the resolved config). timestamp = Date.now(), an enumerable own property on template errors, callable errors (read-only, like the callable's other fields) and called-callable errors; absent (not undefined) when off; included in toJSON.
+- Deprecated: format, colors and the Format type carry @deprecated JSDoc ("No effect ... removed in 0.4.0; format errors in your logger"). configure() still accepts them (tested). The configure() JSDoc example no longer uses them.
+- Docs: README Configuration and per-instance sections now list only working options, with a Deprecated note; LLMS.txt ErrorSetConfig/Config blocks and examples updated the same way. CHANGELOG Fixed + Deprecated entries.
+- Tests first: tests/timestamp.test.ts (6 tests): default absent; global on; per-set on; per-set false overrides global true; JSON includes timestamp; format/colors accepted with no effect. 2 failed before the change (the JSON test was then tightened so it cannot pass vacuously). bun test 144 pass; coverage 100% funcs / 99.90% lines (the TASK-047 timestamp branch is now covered).
+- Benchmark (median of 3): create_template_2keys 165.4 ns (160.8 after TASK-047; 107.4 baseline), callable 178.6, includeStack 584.9; guards unchanged.
+- Verification: strict gate passes. Verified with scripts/ci-local.sh (35a0ebc, PASS); GitHub Actions unavailable (billing lock).
+- Breaking change: none (format/colors still accepted).
+<!-- SECTION:NOTES:END -->
