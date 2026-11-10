@@ -166,6 +166,72 @@ export type NoDuplicates<T extends readonly string[]> =
   HasDuplicates<T> extends true ? never : T
 
 /**
+ * Kind names an error set cannot use. A kind becomes a property of the set, which is
+ * a function, so it must not collide with:
+ * - the set's own members (`recover`, `inspect`, `merge`, `capture`, `captureAsync`,
+ *   `kinds`, `Type`, and `from`, reserved for rehydration);
+ * - the `_` catch-all key of `recover` handlers;
+ * - names every function inherits from `Function.prototype` and `Object.prototype`.
+ */
+export const RESERVED_KINDS = [
+  // error set members
+  "recover",
+  "inspect",
+  "merge",
+  "capture",
+  "captureAsync",
+  "kinds",
+  "Type",
+  "from",
+  // recover catch-all key
+  "_",
+  // Function.prototype and own function properties
+  "name",
+  "length",
+  "apply",
+  "bind",
+  "call",
+  "arguments",
+  "caller",
+  // Object.prototype
+  "constructor",
+  "toString",
+  "toLocaleString",
+  "valueOf",
+  "hasOwnProperty",
+  "isPrototypeOf",
+  "propertyIsEnumerable",
+  "__proto__",
+  "__defineGetter__",
+  "__defineSetter__",
+  "__lookupGetter__",
+  "__lookupSetter__",
+] as const
+
+/** Union of the reserved kind names. */
+export type ReservedKind = (typeof RESERVED_KINDS)[number]
+
+/**
+ * Rejects tuples containing a reserved kind name: the parameter type becomes a
+ * one-element tuple holding a message that names the reserved word.
+ *
+ * @example
+ * ```ts
+ * type A = NoReserved<["a", "b"]>        // ["a", "b"]
+ * type B = NoReserved<["a", "recover"]>  // readonly ['"recover" is a reserved kind name in errorset; rename the kind']
+ * ```
+ */
+export type NoReserved<T extends readonly string[]> = [
+  Extract<T[number], ReservedKind>,
+] extends [never]
+  ? T
+  : readonly [
+      `"${Extract<T[number], ReservedKind>}" is a reserved kind name in errorset; rename the kind`,
+    ]
+
+const reservedKindNames: ReadonlySet<string> = new Set(RESERVED_KINDS)
+
+/**
  * Builder type returned by errorSet() that allows binding the entity type.
  *
  * @typeParam Kinds - Tuple type of error kind strings
@@ -1210,10 +1276,16 @@ const registerSetName = (name: string, kinds: readonly string[]): void => {
 export function errorSet<
   N extends string,
   const Kinds extends readonly string[],
->(name: N, kinds: NoDuplicates<Kinds>): ErrorSetBuilder<Kinds, N> {
-  // Runtime validation for JavaScript consumers or edge cases
+>(name: N, kinds: NoReserved<NoDuplicates<Kinds>>): ErrorSetBuilder<Kinds, N> {
+  // Runtime validation for JavaScript consumers or edge cases, before any property
+  // is defined on the set
   const seen = new Set<string>()
-  for (const kind of kinds) {
+  for (const kind of kinds as readonly string[]) {
+    if (reservedKindNames.has(kind)) {
+      throw new Error(
+        `"${kind}" is a reserved kind name in errorset; rename the kind`
+      )
+    }
     if (seen.has(kind)) {
       throw new Error(`Duplicate kind "${kind}" in error set "${name}"`)
     }

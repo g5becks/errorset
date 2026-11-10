@@ -57,21 +57,28 @@ Creates an error set builder. Must be followed by `.init<T>()` to complete.
 ```typescript
 function errorSet<N extends string, const Kinds extends readonly string[]>(
   name: N,
-  kinds: NoDuplicates<Kinds>
-): ErrorSetBuilder<Kinds>
+  kinds: NoReserved<NoDuplicates<Kinds>>
+): ErrorSetBuilder<Kinds, N>
 ```
 
 **Parameters:**
-- `name`: String identifier for the error set (used in debugging output)
-- `kinds`: Readonly array of unique error kind strings (duplicates rejected at compile time and runtime)
+- `name`: Unique name of the error set; every error records it as `set`, and guards match on it
+- `kinds`: Readonly array of unique error kind strings (duplicates and reserved names rejected at compile time and runtime)
 
 **Returns:** `ErrorSetBuilder<Kinds>` with `.init<T>()` method
 
-**Throws:** `Error` if duplicate kinds are provided (e.g., `["a", "b", "a"]`)
+**Throws:** `Error` if duplicate kinds are provided (e.g., `["a", "b", "a"]`) or a kind is a reserved name (e.g., `["recover"]`)
 
 **Duplicate Detection:**
 - Compile-time: TypeScript's `NoDuplicates` type constraint rejects duplicate literals
 - Runtime: Throws `Error: Duplicate kind "x" in error set "Name"` for JS consumers or edge cases
+
+**Reserved kind names** (`RESERVED_KINDS`, type `ReservedKind`): `recover`, `inspect`, `merge`, `capture`,
+`captureAsync`, `kinds`, `Type`, `from`, `_`, and names every function inherits (`name`, `length`, `apply`,
+`bind`, `call`, `arguments`, `caller`, `constructor`, `toString`, `toLocaleString`, `valueOf`, `hasOwnProperty`,
+`isPrototypeOf`, `propertyIsEnumerable`, `__proto__`, `__defineGetter__`, `__defineSetter__`, `__lookupGetter__`,
+`__lookupSetter__`). They fail to compile (`NoReserved`) and throw
+`"<name>" is a reserved kind name in errorset; rename the kind` at runtime.
 
 **Example:**
 ```typescript

@@ -3,9 +3,11 @@ id: TASK-057
 title: >-
   Safety: reject reserved kind names at compile time and with a clear runtime
   error
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@claude'
 created_date: '2026-11-10T17:35:00Z'
+updated_date: '2026-11-10T20:13:00Z'
 labels:
   - types
   - breaking
@@ -38,3 +40,13 @@ Kind names that collide with set methods or properties (`recover`, `kinds`, `Typ
 - [ ] #3 CHANGELOG.md lists the change under ## [Unreleased] > ### Breaking changes with migration steps
 - [ ] #4 bash scripts/ci-local.sh HEAD prints RESULT: PASS
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. RESERVED_KINDS (runtime array) and ReservedKind union: set members (recover, inspect, merge, capture, captureAsync, kinds, Type), the recover catch-all key "_", "from" (XError.from in TASK-065, reserved now to avoid a later breaking change), and everything the set function inherits from Function.prototype/Object.prototype (name, length, call, apply, bind, arguments, caller, constructor, toString, valueOf, toLocaleString, hasOwnProperty, isPrototypeOf, propertyIsEnumerable, __proto__, __defineGetter__, __defineSetter__, __lookupGetter__, __lookupSetter__).
+2. NoReserved<Kinds> combined with NoDuplicates in errorSet(): a reserved kind maps the parameter to a tuple whose element is the message naming the word.
+3. Runtime check in errorSet() before any defineProperty: throws '"<name>" is a reserved kind name in errorset; rename the kind'.
+4. Runtime + type test for every reserved name (type tests generated per name); flip A3; namespacing considered and rejected.
+5. CHANGELOG breaking, README; gate; ci-local.
+<!-- SECTION:PLAN:END -->

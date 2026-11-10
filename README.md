@@ -151,6 +151,20 @@ const BadError = errorSet("BadError", ["not_found", "invalid", "not_found"])
 
 This prevents subtle bugs where duplicate kinds could cause property collisions or unexpected behavior.
 
+### Reserved Kind Names
+
+Kinds become properties of the error set, so a few names are reserved: the set's own members
+(`recover`, `inspect`, `merge`, `capture`, `captureAsync`, `kinds`, `Type`, and `from`), the `_`
+catch-all key of `recover`, and the names every JavaScript function inherits (`name`, `length`,
+`call`, `apply`, `bind`, `constructor`, `toString`, `valueOf`, `__proto__`, …). The full list is
+exported as `RESERVED_KINDS`. A reserved name fails to compile and throws a clear error at runtime:
+
+```typescript
+errorSet("JobError", ["recover", "timeout"]);
+// ❌ Type error: '"recover" is a reserved kind name in errorset; rename the kind'
+// Runtime (untyped callers): Error: "recover" is a reserved kind name in errorset; rename the kind
+```
+
 ---
 
 ## Creating Errors

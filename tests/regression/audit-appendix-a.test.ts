@@ -133,7 +133,8 @@ describe("A2 cross-copy recognition (two separately built copies)", () => {
 })
 
 describe("A3 reserved kind names", () => {
-  test.failing("A3 [TASK-057] a reserved kind name throws a clear error naming it", () => {
+  test("A3 [TASK-057] a reserved kind name throws a clear error naming it", () => {
+    // @ts-expect-error - reserved kind names are also rejected at compile time
     expect(() => errorSet("S", ["recover"]).init()).toThrow(
       RESERVED_RECOVER_MESSAGE
     )
