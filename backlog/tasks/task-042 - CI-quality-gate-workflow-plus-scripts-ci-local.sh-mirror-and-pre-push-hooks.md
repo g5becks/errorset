@@ -1,11 +1,11 @@
 ---
 id: TASK-042
 title: 'CI: quality-gate workflow plus scripts/ci-local.sh mirror and pre-push hooks'
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-11-10T17:35:00Z'
-updated_date: '2026-11-10T17:58:00Z'
+updated_date: '2026-11-10T18:16:00Z'
 labels:
   - ci
 milestone: m-0
@@ -38,11 +38,11 @@ GitHub Actions is currently unavailable for this account (billing lock), so the 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 ci.yml runs lint, typecheck, test with coverage, build and type tests on Linux and macOS for Bun 1.3.14, 1.4.4 and latest; a TS 5.9/6.0/7.0 job (7.1 beta advisory); and a Node 22/LTS import job
-- [ ] #2 All actions are pinned by commit SHA; bunx --bun actionlint passes
-- [ ] #3 scripts/ci-local.sh mirrors every ci.yml job, exits non-zero on failure, writes logs, and prints RESULT: PASS for HEAD (run inside the Codex sandbox)
-- [ ] #4 lefthook pre-push runs typecheck and tests
-- [ ] #5 Remote CI note recorded: 'Verified with scripts/ci-local.sh (<sha>, PASS); GitHub Actions unavailable (billing lock)'
+- [x] #1 ci.yml runs lint, typecheck, test with coverage, build and type tests on Linux and macOS for Bun 1.3.14, 1.4.4 and latest; a TS 5.9/6.0/7.0 job (7.1 beta advisory); and a Node 22/LTS import job
+- [x] #2 All actions are pinned by commit SHA; bunx --bun actionlint passes
+- [x] #3 scripts/ci-local.sh mirrors every ci.yml job, exits non-zero on failure, writes logs, and prints RESULT: PASS for HEAD (run inside the Codex sandbox)
+- [x] #4 lefthook pre-push runs typecheck and tests
+- [x] #5 Remote CI note recorded: 'Verified with scripts/ci-local.sh (<sha>, PASS); GitHub Actions unavailable (billing lock)'
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -54,3 +54,17 @@ GitHub Actions is currently unavailable for this account (billing lock), so the 
 4. lefthook pre-push: typecheck + bun test.
 5. actionlint, quality gate, ci-local HEAD.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+- Outcome: .github/workflows/ci.yml (push main/release/**, pull_request, workflow_dispatch; permissions contents: read) with jobs check ({ubuntu,macos} x Bun {1.3.14,1.4.4,latest}: frozen install, lint, typecheck, test --coverage, build, test:types), typescript (Bun 1.4.4; tsc --noEmit + type tests on TS 5.9.3/6.0.3/7.0.2, 7.1.0-beta continue-on-error) and node (build, then scripts/node-import-check.mjs on Node 22 and lts/*).
+- Actions pinned by commit SHA, resolved with git ls-remote: actions/checkout 3d3c42e (v7.0.1), oven-sh/setup-bun 0c5077e (v2.2.0), actions/setup-node 949feb2 (v7.1.0). bunx --bun actionlint: clean.
+- scripts/ci-local.sh ported from StrataDB: clean clone of the ref; macOS legs on the host (npm-packed @oven/bun-darwin-aarch64 for non-host versions, with a bun --version assertion); Linux legs in Colima (oven/bun:<v> with git + npx->bunx shim; node:22-slim and node:lts-slim); logs under ../errorset-release/ci-local/<sha>/logs; prints a table and RESULT; exit 1 on any required failure. Only writes under the repo, ~/.npm and /Users/takinprofit/Dev/errorset-release.
+- lefthook: pre-commit ultracite fix kept; pre-push runs bun run typecheck and bun test.
+- Verified with scripts/ci-local.sh (71262ba, PASS); GitHub Actions unavailable (billing lock). All 12 legs pass (check x6, TS 5.9.3/6.0.3/7.0.2 + 7.1.0-beta advisory, node 22.23.4 and lts 26.13.0).
+- Negative check: a throwaway clone with a deliberately broken assertion (commit 18949d0, not in this repo) gave RESULT: FAIL, exit 1 (check legs fail in bun test/typecheck; TS legs fail with TS2769 because Bun types toEqual).
+- Deviation: ci-local was run from Claude Code on the host, not inside a Codex sandbox; the script uses no paths outside the listed writable roots.
+- Process note: commit 74aa3d2 landed with a lint error (a pipe masked the exit code); fixed forward in 71262ba before any push.
+- Breaking change: none.
+<!-- SECTION:NOTES:END -->
