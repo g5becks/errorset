@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-10
+
 ### Added
 
 - Release tooling: `bun run release:prepare <version> [--dry-run]` prepares a verified release (changelog roll, version bump, tag, local CI, packed tarball with SHA-512 and release notes) without pushing or publishing; `.github/workflows/release.yml` publishes tags with npm trusted publishing and provenance; `CONTRIBUTING.md` documents the procedure. Retroactive tags `v0.1.0`, `v0.2.1` and `v0.3.0`, verified against the published tarballs.
@@ -66,7 +68,8 @@ Initial release.
 - `recover`, `inspect`, `merge`, `capture` and `captureAsync` helpers, plus iteration over a set's kinds.
 - Error chaining with `cause`, custom debugger output, optional stack capture and global `configure()`.
 
-[Unreleased]: https://github.com/g5becks/errorset/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/g5becks/errorset/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/g5becks/errorset/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/g5becks/errorset/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/g5becks/errorset/compare/v0.1.0...v0.2.1
 [0.1.0]: https://github.com/g5becks/errorset/releases/tag/v0.1.0
