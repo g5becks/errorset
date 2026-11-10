@@ -99,7 +99,7 @@ expectTypeOf(err).toExtend<Err<"not_found", { id: string }>>()
 
 // Template holes must be keys of the entity type
 // @ts-expect-error - "nope" is not a key of User
-UserError.not_found`User ${"nope"} not found`
+expectTypeOf(UserError.not_found`User ${"nope"} not found`).toBeFunction()
 expectTypeOf(err.kind).toEqualTypeOf<"not_found">()
 expectTypeOf(err.message).toEqualTypeOf<string>()
 expectTypeOf(err.data).toExtend<{ id: string }>()

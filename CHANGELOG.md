@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Dev tooling: `@types/bun` pinned to 1.4.4 (was `latest`); ultracite 8.1.1, Biome 2.6.6 and lefthook 2.2.2, all pinned exactly. No runtime changes.
 - Removed the `typescript: ^5` peer dependency. The package ships only `.d.ts` files, and CI verifies them on TypeScript 5.9, 6.0 and 7.0, so TypeScript 6/7 projects no longer get peer conflicts.
 - `engines` is now `node >=22` and `bun >=1.3.14`, matching the CI matrix (Node 18 is end-of-life).
 - No source maps are shipped: `dist/index.js` is a single unminified bundle, so stack traces stay readable without them.

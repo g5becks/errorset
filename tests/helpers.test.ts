@@ -12,7 +12,7 @@ import {
 } from "../src/index.ts"
 
 // Pre-define regex at module level
-const noHandlerRegex = /No handler found for error kind: suspended/
+const noHandlerRegex = /No handler found for error kind: suspended/u
 
 describe("recover Method", () => {
   type User = { id: string; name: string }

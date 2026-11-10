@@ -98,8 +98,8 @@ const fixture = async (
     type,
     dependencies: { [PACKAGE]: `file:${tarball}` },
   })
-  for (const [file, contents] of Object.entries(files)) {
-    await write(join(dir, file), contents)
+  for (const [fileName, contents] of Object.entries(files)) {
+    await write(join(dir, fileName), contents)
   }
   if (compilerOptions) {
     await writeJson(join(dir, "tsconfig.json"), {

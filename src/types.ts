@@ -401,7 +401,7 @@ export function createKindFunction<
 
         // Build message by interpolating values
         let message = strings[0] ?? ""
-        for (let i = 0; i < keys.length; i++) {
+        for (let i = 0; i < keys.length; i += 1) {
           const key = keys[i]
           const value = key === undefined ? undefined : entity[key]
           message += String(value ?? "")
@@ -526,7 +526,7 @@ export function createSetGuard<
     }
 
     // Must have a kind property that is in our set
-    const kind = (value as Record<string, unknown>).kind
+    const { kind } = value as Record<string, unknown>
     if (typeof kind !== "string") {
       return false
     }
@@ -608,7 +608,7 @@ export function recover<
 
   // Value is an error - look for matching handler
   const error = value
-  const kind = error.kind
+  const { kind } = error
 
   // Try specific handler first
   const specificHandler = handlers[kind]
@@ -686,7 +686,7 @@ export function inspect<
 
   // Value is an error - look for matching handler
   const error = value
-  const kind = error.kind
+  const { kind } = error
 
   // Call specific handler if provided
   const handler = handlers[kind]

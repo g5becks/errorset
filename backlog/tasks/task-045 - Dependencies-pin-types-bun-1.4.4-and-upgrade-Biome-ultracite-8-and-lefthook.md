@@ -1,9 +1,11 @@
 ---
 id: TASK-045
 title: 'Dependencies: pin @types/bun 1.4.4 and upgrade Biome, ultracite 8 and lefthook'
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@claude'
 created_date: '2026-11-10T17:35:00Z'
+updated_date: '2026-11-10T18:38:00Z'
 labels:
   - dependencies
 milestone: m-0
@@ -35,3 +37,12 @@ type: chore
 - [ ] #3 Test count and coverage are unchanged from before the upgrade (numbers in notes)
 - [ ] #4 bash scripts/ci-local.sh HEAD prints RESULT: PASS
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Record baseline test count and coverage.
+2. Pin @types/bun 1.4.4; upgrade ultracite to 8.x, Biome to the version ultracite 8 expects, lefthook to 2.2.x.
+3. Migrate biome config if needed; lint:fix; review and record rule changes and disabled rules.
+4. Confirm lefthook install; strict gate; compare test count and coverage; ci-local HEAD.
+<!-- SECTION:PLAN:END -->
