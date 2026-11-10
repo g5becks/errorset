@@ -499,7 +499,6 @@ function applyCreationConfig(
  * ```
  *
  * @internal
- * @deprecated Internal; will be removed from the public entry in 0.4.0. Use `errorSet(name, kinds).init<T>()` instead.
  */
 export function createKindFunction<
   Kind extends string,
@@ -758,7 +757,6 @@ const membersOf = (guard: {
  * ```
  *
  * @internal
- * @deprecated Internal; will be removed from the public entry in 0.4.0. Use `errorSet(name, kinds).init<T>()` instead.
  */
 export function createSetGuard<
   Kinds extends string,
@@ -966,7 +964,6 @@ const withKinds = <
  * @returns A type guard function with kinds array and instanceof support
  *
  * @internal
- * @deprecated Internal; will be removed from the public entry in 0.4.0. Use `errorSet(name, kinds).init<T>()` instead.
  */
 export function createSetGuardWithKinds<
   Kinds extends string,

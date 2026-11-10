@@ -133,3 +133,18 @@ describe("isErr Helper", () => {
     expect(isErr([ERR, "not_found"])).toBe(false)
   })
 })
+
+describe("public entry", () => {
+  it("does not export the internal helpers (removed in 0.4.0)", async () => {
+    const api = await import("../src/index.ts")
+    const names = Object.keys(api)
+    for (const internal of [
+      "createKindFunction",
+      "createSetGuard",
+      "createSetGuardWithKinds",
+    ]) {
+      expect(names).not.toContain(internal)
+    }
+    expect(names).toContain("errorSet")
+  })
+})

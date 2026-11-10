@@ -20,9 +20,6 @@ export {
 export {
   captureAsync,
   captureSync,
-  createKindFunction,
-  createSetGuard,
-  createSetGuardWithKinds,
   ERR,
   ERR_PROTOCOL,
   type Err,
