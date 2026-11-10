@@ -408,6 +408,9 @@ const serializationDescriptors = (
   toString: { value: formatError },
 })
 
+/** The `data` of every no-context error: one shared, frozen empty object. @internal */
+const EMPTY_DATA = Object.freeze({}) as Record<string, never>
+
 /**
  * Captures a stack trace on the target object if available (V8 engines only).
  * This is a zero-cost operation in non-V8 environments.
@@ -460,12 +463,12 @@ function applyCreationConfig(
     : globalConfig
 
   if (config.includeTimestamp) {
-    // Callable errors are functions whose fields are read-only own properties
+    // Errors are frozen right after creation, so this becomes read-only too
     Object.defineProperty(target, "timestamp", {
       value: Date.now(),
-      writable: typeof target !== "function",
+      writable: true,
       enumerable: true,
-      configurable: false,
+      configurable: true,
     })
   }
 
@@ -520,7 +523,7 @@ export function createKindFunction<
     options: ErrorOptions | undefined,
     constructorOpt: unknown
   ): NoContextErr<Kind, N> => {
-    const data = {} as Record<string, never>
+    const data = EMPTY_DATA
     const err = {
       [ERR]: ERR_PROTOCOL,
       set: name,
@@ -534,7 +537,8 @@ export function createKindFunction<
     }
     Object.defineProperties(err, noContextDescriptors)
     applyCreationConfig(err, constructorOpt, instanceConfig)
-    return err as unknown as NoContextErr<Kind, N>
+    // Errors are immutable, matching their readonly types (EMPTY_DATA is frozen once)
+    return Object.freeze(err) as unknown as NoContextErr<Kind, N>
   }
   const withOptions = function (
     this: { message: string },
@@ -608,7 +612,9 @@ export function createKindFunction<
         // Capture stack trace if enabled (V8 engines only)
         applyCreationConfig(err, creator, instanceConfig)
 
-        return err
+        // Errors are immutable, matching their readonly types (data is a shallow freeze)
+        Object.freeze(data)
+        return Object.freeze(err)
       }
 
       return creator
@@ -1092,9 +1098,12 @@ const withCaughtCause = <E>(mapped: E, caught: unknown): E => {
       }
     }
   }
-  return Object.defineProperties(
-    Object.create(Object.getPrototypeOf(mapped) as object | null),
-    ordered
+  // The copy is frozen like every error; its data is the original's frozen object
+  return Object.freeze(
+    Object.defineProperties(
+      Object.create(Object.getPrototypeOf(mapped) as object | null),
+      ordered
+    )
   ) as E
 }
 

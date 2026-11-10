@@ -181,7 +181,7 @@ describe("A6 capture drops the original error", () => {
 })
 
 describe("A8 mutable errors", () => {
-  test.failing("A8 [TASK-061] writing to an error's message throws", () => {
+  test("A8 [TASK-061] writing to an error's message throws", () => {
     const E = errorSet("E", ["boom"]).init<IdCtx>()
     const err = E.boom`id ${"id"}`({ id: "1" }) as { message: string }
     expect(() => {
@@ -189,7 +189,7 @@ describe("A8 mutable errors", () => {
     }).toThrow(TypeError)
   })
 
-  test.failing("A8 [TASK-061] writing to an error's data throws", () => {
+  test("A8 [TASK-061] writing to an error's data throws", () => {
     const E = errorSet("E", ["boom"]).init<IdCtx>()
     const err = E.boom`id ${"id"}`({ id: "1" }) as { data: { id: string } }
     expect(() => {

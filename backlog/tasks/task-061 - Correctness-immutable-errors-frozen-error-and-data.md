@@ -1,9 +1,11 @@
 ---
 id: TASK-061
 title: 'Correctness: immutable errors (frozen error and data)'
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@claude'
 created_date: '2026-11-10T17:35:00Z'
+updated_date: '2026-11-10T21:06:00Z'
 labels:
   - correctness
   - breaking
@@ -37,3 +39,12 @@ type: bug
 - [ ] #3 CHANGELOG.md lists the change under ## [Unreleased] > ### Breaking changes with migration steps
 - [ ] #4 bash scripts/ci-local.sh HEAD prints RESULT: PASS
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Freeze every error at creation after creation options are applied (Object.freeze(err)) and its data shallowly (Object.freeze(data)), for template and no-context errors; capture's cause-attaching copy is frozen too (data is already frozen and shared).
+2. Tests: writes to message, data fields, new keys and deletes throw TypeError (ES modules are strict); with()/capture still work on frozen errors; flip both A8 cases.
+3. Benchmark A/B on the same code with and without freezing (bench --runs 3); criterion: freeze overhead < 10% of the 0.3.0 baseline creation time (107.4 ns -> < 10.7 ns); record numbers.
+4. CHANGELOG breaking; docs; gate; ci-local.
+<!-- SECTION:PLAN:END -->
