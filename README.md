@@ -270,6 +270,19 @@ if (isErr(result)) {
 }
 ```
 
+### Across Copies and Versions
+
+Errors are recognized by a brand stored under the registry symbol
+`Symbol.for("@takinprofit/errorset/err")` (exported as `ERR`), not by object identity or
+prototypes. Every copy of errorset loaded in the same process shares that symbol, so an
+error created by a separately bundled plugin, a duplicate install or another version passes
+`isErr` and the set and kind guards of your copy.
+
+The brand's value is a protocol number (`ERR_PROTOCOL`, currently `1`). Guards accept the
+protocols they understand, so copies with the same protocol interoperate; a future
+incompatible error shape will bump it. Brand checks do not survive serialization:
+`JSON.parse(JSON.stringify(err))` is plain data.
+
 ---
 
 ## Handling Errors

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking changes
+
+- **Error brand is a registry symbol with a protocol number (cross-copy recognition).** `ERR` is now `Symbol.for("@takinprofit/errorset/err")` instead of a per-module `Symbol("err")`, and an error's `[ERR]` value is the protocol number `1` (exported as `ERR_PROTOCOL`, type `ErrProtocol`) instead of `true`. Errors created by another copy of errorset in the same process (a bundled plugin, a duplicate install, another version with the same protocol) now pass `isErr` and the set and kind guards; before, they failed all three.
+  *Migration:* use `isErr(value)` or a set guard instead of reading the brand. Code that checks `value[ERR] === true` must check `value[ERR] === ERR_PROTOCOL` (or call `isErr`); code that builds error-like objects by hand with `[ERR]: true` must use `[ERR]: ERR_PROTOCOL`. The `Err` type's `[ERR]` property is now `ErrProtocol` (`1`).
+
 ## [0.3.1] - 2026-11-10
 
 ### Added

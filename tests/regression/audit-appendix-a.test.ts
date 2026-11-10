@@ -120,11 +120,12 @@ describe("A1 cross-set confusion", () => {
 })
 
 describe("A2 cross-copy recognition (two separately built copies)", () => {
-  test.failing("A2 [TASK-054] isErr from copy A accepts an error created by copy B", () => {
+  test("A2 [TASK-054] isErr from copy A accepts an error created by copy B", () => {
     expect(runCrossCopyProbe().hostIsErr).toBe(true)
   })
 
-  test.failing("A2 [TASK-055] set and kind guards from copy A accept copy B's error", () => {
+  // Passes since the registry-symbol brand; TASK-055 (set identity) must keep it passing.
+  test("A2 [TASK-054] set and kind guards from copy A accept copy B's error", () => {
     const result = runCrossCopyProbe()
     expect(result.hostSetGuard).toBe(true)
     expect(result.hostKindGuard).toBe(true)

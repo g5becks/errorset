@@ -6,11 +6,39 @@
 import { type Config, getConfig } from "./config.ts"
 
 /**
- * Unique symbol used to brand error objects.
- * This allows reliable identification of error set values
- * without relying on instanceof or prototype chains.
+ * Symbol used to brand error objects.
+ *
+ * It is a registry symbol (`Symbol.for`), so every copy of errorset in a process
+ * (bundled plugins, duplicate installs, different versions) uses the same key and
+ * recognizes the others' errors. The brand's value is the protocol number
+ * ({@link ERR_PROTOCOL}), not `true`.
  */
-export const ERR: unique symbol = Symbol("err")
+export const ERR: unique symbol = Symbol.for("@takinprofit/errorset/err")
+
+/**
+ * Version of the error shape behind the {@link ERR} brand. Guards accept the
+ * protocols this copy understands; a future incompatible shape bumps the number.
+ */
+export const ERR_PROTOCOL = 1
+
+/** Brand value of errors created by this version. */
+export type ErrProtocol = typeof ERR_PROTOCOL
+
+/**
+ * Returns true when `value` is an object or function branded with a protocol this
+ * copy understands. Shared by `isErr` and every set and kind guard.
+ *
+ * @internal
+ */
+const hasBrand = (value: unknown): value is { readonly [ERR]: ErrProtocol } => {
+  if (
+    value === null ||
+    (typeof value !== "object" && typeof value !== "function")
+  ) {
+    return false
+  }
+  return (value as { [ERR]?: unknown })[ERR] === ERR_PROTOCOL
+}
 
 /**
  * Type alias for the ERR symbol type.
@@ -39,8 +67,8 @@ export type Err<
   Kind extends string = string,
   Data extends Record<string, unknown> = Record<string, unknown>,
 > = {
-  /** Brand property identifying this as an error set value */
-  readonly [ERR]: true
+  /** Brand identifying an error set value; its value is the protocol number */
+  readonly [ERR]: ErrProtocol
   /** The error kind/tag (e.g., "not_found", "validation") */
   readonly kind: Kind
   /** Human-readable error message */
@@ -75,14 +103,8 @@ export type Err<
 export function isErr(
   value: unknown
 ): value is Err<string, Record<string, unknown>> {
-  // Support both objects and callable errors (functions with ERR symbol)
-  if (value === null) {
-    return false
-  }
-  if (typeof value !== "object" && typeof value !== "function") {
-    return false
-  }
-  return ERR in value && (value as Record<typeof ERR, unknown>)[ERR] === true
+  // Objects and callable errors (functions) both carry the brand
+  return hasBrand(value)
 }
 
 /**
@@ -425,7 +447,7 @@ export function createKindFunction<
         // Create callable error function
         const callableErr = (options?: ErrorOptions) => {
           const newErr = {
-            [ERR]: true,
+            [ERR]: ERR_PROTOCOL,
             kind,
             message,
             data,
@@ -442,7 +464,7 @@ export function createKindFunction<
 
         // Attach error properties to the function itself
         Object.defineProperty(callableErr, ERR, {
-          value: true,
+          value: ERR_PROTOCOL,
           writable: false,
           enumerable: true,
           configurable: false,
@@ -504,7 +526,7 @@ export function createKindFunction<
 
         // Create error object with custom inspect for debuggers
         const err = {
-          [ERR]: true,
+          [ERR]: ERR_PROTOCOL,
           kind,
           message,
           data: data as Pick<T, K>,
@@ -529,22 +551,11 @@ export function createKindFunction<
 
     // Called as guard - check if value is this specific error kind
     const value = stringsOrValue
-    // Support both objects and callable errors (functions)
-    if (
-      value === null ||
-      (typeof value !== "object" && typeof value !== "function")
-    ) {
+    if (!hasBrand(value)) {
       return false
     }
 
-    if (
-      !(ERR in value) ||
-      (value as Record<typeof ERR, unknown>)[ERR] !== true
-    ) {
-      return false
-    }
-
-    return (value as Record<string, unknown>).kind === kind
+    return (value as unknown as Record<string, unknown>).kind === kind
   }
 
   // Add string coercion support
@@ -606,19 +617,8 @@ export function createSetGuard<
   T extends Record<string, unknown>,
 >(kinds: Kinds[]): SetGuard<Kinds, T> {
   const guard = (value: unknown): value is Err<Kinds, Partial<T>> => {
-    // Support both objects and callable errors (functions)
-    if (
-      value === null ||
-      (typeof value !== "object" && typeof value !== "function")
-    ) {
-      return false
-    }
-
-    // Must have ERR symbol set to true
-    if (
-      !(ERR in value) ||
-      (value as Record<typeof ERR, unknown>)[ERR] !== true
-    ) {
+    // Must carry a brand this copy understands (objects and callable errors)
+    if (!hasBrand(value)) {
       return false
     }
 

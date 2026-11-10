@@ -578,7 +578,7 @@ The error object structure:
 
 ```typescript
 type Err<Kind extends string, Data extends Record<string, unknown>> = {
-  readonly [ERR]: true;           // Brand symbol for identification
+  readonly [ERR]: 1;              // Brand: registry symbol Symbol.for("@takinprofit/errorset/err"), value = protocol (ERR_PROTOCOL)
   readonly kind: Kind;            // Error kind literal
   readonly message: string;       // Human-readable message
   readonly data: Data;            // Extracted context fields
@@ -713,7 +713,7 @@ export type {
 } from "@takinprofit/errorset";
 
 // Symbols
-export { ERR } from "@takinprofit/errorset";
+export { ERR, ERR_PROTOCOL } from "@takinprofit/errorset";
 
 // Standalone functions (also available as methods)
 export {
