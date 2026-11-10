@@ -1,9 +1,11 @@
 ---
 id: TASK-041
 title: 'Testing: build-independent type tests with expect-type (replace tsd)'
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@claude'
 created_date: '2026-11-10T17:35:00Z'
+updated_date: '2026-11-10T17:41:00Z'
 labels:
   - testing
   - toolchain
@@ -38,3 +40,13 @@ type: chore
 - [ ] #4 Mutation check recorded: a broken positive and a broken negative assertion each make test:types fail
 - [ ] #5 Quality gate passes: bun run typecheck, bun run lint, bun test (bunfig.toml coverage thresholds), bun run build, and every other check script that exists at the time (test:types, test:consumer)
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Port test-d/index.test-d.ts to tests/types/index.test-d.ts importing ../../src/index.ts; tsd expectType/expectError/expectAssignable -> expect-type expectTypeOf / @ts-expect-error.
+2. tests/types/tsconfig.json extending root; test:types = tsc --noEmit -p tests/types/tsconfig.json.
+3. Remove tsd, the tsd package.json block and test-d/; update prepublishOnly.
+4. Verify fresh clone (no dist) typecheck + test:types; run on TS 5.9.3/6.0.3/7.0.2.
+5. Mutation check (one positive, one negative assertion).
+<!-- SECTION:PLAN:END -->
