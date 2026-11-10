@@ -240,6 +240,64 @@ export type KindFunction<
 > = KindConstructor<Kind, T> & KindGuard<Kind, T>
 
 /**
+ * JSON shape of an error: `{ kind, message, data, cause?, timestamp? }`.
+ */
+type ErrJSON = {
+  kind: string
+  message: string
+  data: unknown
+  cause?: unknown
+  timestamp?: number
+}
+
+type SerializableErr = {
+  kind: string
+  message: string
+  data: unknown
+  cause?: unknown
+  timestamp?: number
+}
+
+/**
+ * Serializes a cause for JSON. errorset errors serialize through their own
+ * `toJSON` when `JSON.stringify` recurses; a native `Error` would otherwise
+ * become `{}`, so it is reduced to `{ name, message }`.
+ */
+const serializeCause = (cause: unknown): unknown =>
+  cause instanceof Error ? { name: cause.name, message: cause.message } : cause
+
+/**
+ * Shared `toJSON` for both error shapes. Without it the callable no-context
+ * error (a function) disappears from `JSON.stringify` output.
+ */
+function errToJSON(this: SerializableErr): ErrJSON {
+  const json: ErrJSON = {
+    kind: this.kind,
+    message: this.message,
+    data: this.data,
+  }
+  if (this.cause !== undefined) {
+    json.cause = serializeCause(this.cause)
+  }
+  if (this.timestamp !== undefined) {
+    json.timestamp = this.timestamp
+  }
+  return json
+}
+
+/**
+ * Property descriptors for non-enumerable `toJSON` and `toString`, built once per
+ * kind and applied with `Object.defineProperties`, so `Object.keys` and deep
+ * equality of errors are unchanged.
+ */
+const serializationDescriptors = (
+  formatError: () => string
+): PropertyDescriptorMap => ({
+  toJSON: { value: errToJSON },
+  toString: { value: formatError },
+})
+
+/**
  * Captures a stack trace on the target object if available (V8 engines only).
  * This is a zero-cost operation in non-V8 environments.
  *
@@ -310,6 +368,12 @@ export function createKindFunction<
   name: string,
   instanceConfig?: Partial<Config>
 ): KindFunction<Kind, T> {
+  // One `toString` per kind, shared by every error of this kind: "<Set>.<kind>: <message>"
+  const errToString = function (this: { message: string }): string {
+    return `${name}.${kind}: ${this.message}`
+  }
+  const serialization = serializationDescriptors(errToString)
+
   // The dual-purpose function
   const kindFn = <K extends keyof T & string>(
     stringsOrValue: TemplateStringsArray | object | null | undefined,
@@ -344,6 +408,7 @@ export function createKindFunction<
             },
           } as Err<Kind, Record<string, never>>
 
+          Object.defineProperties(newErr, serialization)
           captureStack(newErr, callableErr, instanceConfig)
           return newErr
         }
@@ -381,6 +446,8 @@ export function createKindFunction<
           enumerable: false,
           configurable: false,
         })
+
+        Object.defineProperties(callableErr, serialization)
 
         // Capture stack trace on the callable error itself
         captureStack(callableErr, kindFn, instanceConfig)
@@ -421,6 +488,8 @@ export function createKindFunction<
             return `${name}.${kind} ${JSON.stringify(data)}`
           },
         } as Err<Kind, Pick<T, K>>
+
+        Object.defineProperties(err, serialization)
 
         // Capture stack trace if enabled (V8 engines only)
         captureStack(err, creator, instanceConfig)

@@ -459,6 +459,29 @@ console.log(err);
 // Output: UserError.not_found { id: "abc123" }
 ```
 
+## Serialization and Logging
+
+Both error shapes, including the no-context form (which is a function), serialize to
+plain JSON, so errors survive structured logs and HTTP responses:
+
+```typescript
+const err = UserError.not_found`User ${"id"} not found`({ id: "abc123" });
+
+JSON.stringify(err);
+// {"kind":"not_found","message":"User abc123 not found","data":{"id":"abc123"}}
+
+JSON.stringify({ error: UserError.invalid`Invalid user data` });
+// {"error":{"kind":"invalid","message":"Invalid user data","data":{}}}
+
+String(err);  // "UserError.not_found: User abc123 not found"
+`${err}`;     // same
+```
+
+The JSON shape is `{ kind, message, data, cause? }`. A `cause` that is an errorset error
+serializes the same way, recursively; a native `Error` cause becomes `{ name, message }`.
+`toJSON` and `toString` are non-enumerable, so `Object.keys(err)` and spreading are
+unchanged. Stack traces are not included in the JSON output.
+
 ---
 
 ## API Reference
@@ -482,6 +505,7 @@ console.log(err);
 | `Set.capture(fn, map)` | Wrap sync code |
 | `Set.captureAsync(fn, map)` | Wrap async code |
 | `[...Set]` | Iterate kinds |
+| `JSON.stringify(err)` / `String(err)` | Serialize / format an error |
 | `configure(options)` | Set global options |
 ---
 
