@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `require("@takinprofit/errorset")` now works on Node 22+ and Bun: `exports` gains `default` and a `./package.json` entry alongside `types` and `import`.
 - CI workflow (`.github/workflows/ci.yml`): lint, typecheck, coverage, build and type tests on Linux and macOS for Bun 1.3.14, 1.4.4 and latest; TypeScript 5.9/6.0/7.0 compatibility (7.1 beta advisory); a Node 22/LTS import check. `scripts/ci-local.sh` runs the same jobs locally, and lefthook now runs typecheck and tests on pre-push.
 
+### Fixed
+
+- Building from source with Bun 1.3.x produced an empty `dist/index.js` (the bundler dropped every module because the package declared `"sideEffects": false`). `sideEffects` is now `["./src/*.ts"]`: source files count as side-effectful for our own build, and the published `dist/` files remain side-effect free for consumer bundlers (an unused import is still dropped entirely). Bun 1.4 output is byte-identical; published tarballs were never affected when built with Bun 1.4.
+
 ### Changed
 
 - Removed the `typescript: ^5` peer dependency. The package ships only `.d.ts` files, and CI verifies them on TypeScript 5.9, 6.0 and 7.0, so TypeScript 6/7 projects no longer get peer conflicts.

@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@claude'
 created_date: '2026-11-10T17:35:00Z'
-updated_date: '2026-11-10T18:26:00Z'
+updated_date: '2026-11-10T18:34:00Z'
 labels:
   - testing
   - packaging
@@ -43,6 +43,7 @@ Port StrataDB's packed-consumer approach (`/Users/takinprofit/Dev/StrataDb/scrip
 - [ ] #3 The smoke test runs in ci.yml and scripts/ci-local.sh
 - [ ] #4 Mutation check recorded: a broken types path or missing default condition makes test:consumer fail
 - [ ] #5 bash scripts/ci-local.sh HEAD prints RESULT: PASS
+- [ ] #6 Building with every CI Bun version (incl. 1.3.14) produces a working dist/index.js; package.json sideEffects keeps dist/ side-effect free for consumer bundlers
 <!-- AC:END -->
 
 ## Implementation Plan
