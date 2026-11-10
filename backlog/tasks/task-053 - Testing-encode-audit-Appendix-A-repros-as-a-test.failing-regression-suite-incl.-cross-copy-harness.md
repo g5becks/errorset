@@ -3,9 +3,11 @@ id: TASK-053
 title: >-
   Testing: encode audit Appendix A repros as a test.failing regression suite
   (incl. cross-copy harness)
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@claude'
 created_date: '2026-11-10T17:35:00Z'
+updated_date: '2026-11-10T19:52:00Z'
 labels:
   - testing
 milestone: m-1
@@ -46,3 +48,13 @@ type: chore
 - [ ] #3 The suite passes as a whole (test.failing semantics) and the coverage thresholds still hold
 - [ ] #4 bash scripts/ci-local.sh HEAD prints RESULT: PASS
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. tests/regression/audit-appendix-a.test.ts: one test.failing per Appendix A repro asserting the target behavior, named "<id> [<fixing task>] <expected behavior>".
+2. Cross-copy harness: tests/regression/fixtures/cross-copy-probe.ts builds src twice with Bun.build and compares copies; spawned in a subprocess so bundles stay out of coverage.
+3. A10 is type-level: spawn the project tsc on a temp fixture (typeRoots pointing at the repo).
+4. Read every failure by running a copy with test.failing -> test; fix any case failing for the wrong reason.
+5. Gate (coverage), ci-local.
+<!-- SECTION:PLAN:END -->
