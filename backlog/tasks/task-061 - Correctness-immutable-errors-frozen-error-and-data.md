@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@claude'
 created_date: '2026-11-10T17:35:00Z'
-updated_date: '2026-11-10T21:09:00Z'
+updated_date: '2026-11-10T21:16:00Z'
 labels:
   - blocked
 milestone: m-1
@@ -59,4 +59,6 @@ type: bug
 - Attempts: (1) plain freeze of error + data: +13.8/+15.3 ns; (2) shared frozen EMPTY_DATA for no-context errors: fixes no-context, template unchanged; (3) moving the per-error [INSPECT] closure into shared descriptors was reverted because existing tests call the inspect hook detached (no `this`). A standalone probe shows Object.freeze costs about 6-9 ns per object regardless of own-property count (5 own: +6.2, 8 own: +6.3, methods on a prototype: +5.8), so a template error (error + data = 2 objects) has a floor of about 12-15 ns. The audit's premise ("freezing is typically a few ns") does not hold, and TASK-071's shared prototype would not fix it.
 - Options for the maintainer: (a) accept ~+14 ns (13.5% of the old baseline, 9% of current creation) and relax AC #2; (b) freeze only the error, not data (meets the budget but A8 data writes would succeed: conflicts with AC #1); (c) freeze only in development (e.g. NODE_ENV !== "production"): meets the production budget but behavior differs by environment; (d) defer freezing to a later release. Recommendation: (a): immutability is the point of A8 and the absolute cost is ~14 ns per error.
 - Per the run rules, v0.4.0 is not released while this task is blocked.
+
+- ci-local: the freeze commit is covered by Verified with scripts/ci-local.sh (5e4d353, PASS); AC #4 is not checked while the task is blocked (it must be re-run after the maintainer's decision lands).
 <!-- SECTION:NOTES:END -->
