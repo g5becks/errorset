@@ -1,9 +1,11 @@
 ---
 id: TASK-042
 title: 'CI: quality-gate workflow plus scripts/ci-local.sh mirror and pre-push hooks'
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@claude'
 created_date: '2026-11-10T17:35:00Z'
+updated_date: '2026-11-10T17:58:00Z'
 labels:
   - ci
 milestone: m-0
@@ -42,3 +44,13 @@ GitHub Actions is currently unavailable for this account (billing lock), so the 
 - [ ] #4 lefthook pre-push runs typecheck and tests
 - [ ] #5 Remote CI note recorded: 'Verified with scripts/ci-local.sh (<sha>, PASS); GitHub Actions unavailable (billing lock)'
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. ci.yml: check job {ubuntu,macos} x Bun {1.3.14,1.4.4,latest}; typescript job TS 5.9.3/6.0.3/7.0.2 + 7.1.0-beta advisory; node job (build, import dist on Node 22 and lts/*). Actions pinned by SHA resolved via git ls-remote.
+2. scripts/node-import-check.mjs shared by ci.yml and ci-local.
+3. scripts/ci-local.sh ported from StrataDB: clean clone of ref, macOS host legs (npm-packed darwin Bun for non-host versions), Linux legs in Colima (oven/bun, node:*-slim), logs under ../errorset-release/ci-local/<sha>/logs, RESULT line.
+4. lefthook pre-push: typecheck + bun test.
+5. actionlint, quality gate, ci-local HEAD.
+<!-- SECTION:PLAN:END -->
