@@ -44,6 +44,7 @@
     "LICENSE"
   ],
   "scripts": {
+    "bench": "bun bench/errorset.bench.ts",
     "build": "bun build ./src/index.ts --outdir ./dist --target node && bun run build:types",
     "build:types": "tsc -p tsconfig.build.json",
     "lint": "bunx ultracite check",

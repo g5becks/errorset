@@ -1,9 +1,11 @@
 ---
 id: TASK-046
 title: 'Performance: benchmark suite and recorded 0.3.0 baseline'
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@claude'
 created_date: '2026-11-10T17:35:00Z'
+updated_date: '2026-11-10T18:46:00Z'
 labels:
   - performance
   - testing
@@ -45,3 +47,12 @@ Audit baseline (Bun 1.4.4, this machine, 1M iterations):
 - [ ] #2 bench/baseline-0.3.0.json is committed, with medians of 3 runs and machine info; numbers are within ±30% of the audit table or the difference is explained
 - [ ] #3 Quality gate passes: bun run typecheck, bun run lint, bun test (bunfig.toml coverage thresholds), bun run build, and every other check script that exists at the time (test:types, test:consumer)
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Add mitata (pinned) and bench/errorset.bench.ts importing src: template create (2 keys), callable no-context create, includeStack create, 2-kind set guard, 40-kind guard (last kind), non-error guard, plain object, new Error.
+2. bench script prints a table; --json <file> writes per-case ns/op (avg, p50) plus machine info.
+3. Run 3 times on Bun 1.4.4; write bench/baseline-0.3.0.json with medians, machine and OS; compare with the audit table (±30%).
+4. Exclude bench from coverage/tests; quality gate.
+<!-- SECTION:PLAN:END -->
