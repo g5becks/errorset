@@ -59,7 +59,7 @@ describe("toJSON", () => {
       { id: "1" },
       { cause: db }
     )
-    const wrapped = UserError.invalid`Invalid user data`({
+    const wrapped = UserError.invalid`Invalid user data`.with({
       cause: callableCause,
     })
 
@@ -105,7 +105,7 @@ describe("toJSON", () => {
   })
 
   it("serializes the error created by calling a callable error", () => {
-    const err = UserError.invalid`Invalid user data`()
+    const err = UserError.invalid`Invalid user data`.with({})
     expect(roundTrip(err)).toEqual({
       set: "UserError",
       kind: "invalid",
@@ -125,7 +125,9 @@ describe("toString", () => {
   it("formats a callable error and its called form the same way", () => {
     const callable = UserError.invalid`Invalid user data`
     expect(String(callable)).toBe("UserError.invalid: Invalid user data")
-    expect(String(callable())).toBe("UserError.invalid: Invalid user data")
+    expect(String(callable.with({}))).toBe(
+      "UserError.invalid: Invalid user data"
+    )
   })
 })
 
@@ -133,7 +135,7 @@ describe("enumerability", () => {
   it("adds no enumerable keys to either shape", () => {
     const template = UserError.not_found`User ${"id"} not found`({ id: "1" })
     const callable = UserError.invalid`Invalid user data`
-    const called = callable({ cause: template })
+    const called = callable.with({ cause: template })
 
     expect(Object.keys(template)).toEqual(["set", "kind", "message", "data"])
     expect(Object.keys(callable)).toEqual(["set", "kind", "message", "data"])

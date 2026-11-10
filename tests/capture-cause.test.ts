@@ -183,7 +183,9 @@ describe("cause accepts any value", () => {
       { message: "a" },
       { cause: native }
     )
-    const fromValue = DbError.unavailable`Down`({ cause: { retryInMs: 500 } })
+    const fromValue = DbError.unavailable`Down`.with({
+      cause: { retryInMs: 500 },
+    })
     expect(fromNative.cause).toBe(native)
     expect(fromValue.cause).toEqual({ retryInMs: 500 })
     expect(isErr(fromNative.cause)).toBe(false)
@@ -191,7 +193,7 @@ describe("cause accepts any value", () => {
 
   it("errorset causes still narrow with isErr", () => {
     const inner = RootError.root`Inner`
-    const outer = DbError.unavailable`Outer`({ cause: inner })
+    const outer = DbError.unavailable`Outer`.with({ cause: inner })
     expect(errCause(outer.cause).kind).toBe("root")
     expect(() => errCause("not an error")).toThrow(
       "expected an errorset error as cause"

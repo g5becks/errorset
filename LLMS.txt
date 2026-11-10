@@ -143,15 +143,15 @@ Each error kind becomes a tagged template literal function on the error set.
 // With template holes - returns ErrorCreator requiring entity data
 ErrorSet.kind`message with ${"field"} interpolation`(entity, options?)
 
-// Without template holes - returns CallableErr (usable directly)
+// Without template holes - returns a plain error object (NoContextErr), usable directly
 ErrorSet.kind`message without holes`
-ErrorSet.kind`message without holes`(options?)  // optional call for cause
+ErrorSet.kind`message without holes`.with(options)  // new error with options (cause)
 ```
 
 **Parameters:**
 - Template string with optional `${"fieldName"}` placeholders
 - When holes present: `entity` object with values for referenced fields, plus optional `options`
-- When no holes: Optional `options` with `{ cause?: unknown }` for error chaining
+- When no holes: no call; use `.with({ cause })` to add options
 
 **Template Holes:**
 - Must be string literals matching `keyof T`
@@ -160,7 +160,7 @@ ErrorSet.kind`message without holes`(options?)  // optional call for cause
 
 **Returns:** 
 - With holes: `Err<Kind, Pick<T, ReferencedFields>, SetName>`
-- Without holes: `CallableErr<Kind, SetName>` - both an error value AND a function
+- Without holes: `NoContextErr<Kind, SetName>` - a plain error object with a non-enumerable `with(options)`
 
 **Example:**
 ```typescript
@@ -174,10 +174,10 @@ const err0 = UserError.invalid`Invalid user data`;
 // err0.kind === "invalid"
 // err0.message === "Invalid user data"
 // err0.data === {}
-// err0 is both an error AND callable
+// err0 is a plain object: JSON.stringify and structuredClone both work
 
-// NO HOLES with cause - call with options
-const err0b = UserError.invalid`Invalid user data`({ cause: someError });
+// NO HOLES with cause - with() returns a new error
+const err0b = UserError.invalid`Invalid user data`.with({ cause: someError });
 
 // WITH TEMPLATE HOLES - requires entity data
 const err1 = UserError.not_found`User ${"id"} not found`({ id: "123" });
@@ -694,7 +694,7 @@ export { isErr } from "@takinprofit/errorset";
 
 // Types
 export type {
-  CallableErr,        // Error type for no-context errors (callable function with error properties)
+  NoContextErr,       // Error type for no-context errors (plain object with a with(options) method)
   Err,
   ErrorSet,
   ErrorSetBuilder,

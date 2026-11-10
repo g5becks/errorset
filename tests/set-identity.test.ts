@@ -32,7 +32,7 @@ describe("errors record their set", () => {
     const callable = OrderError.rejected`Rejected`
     expect(orderErr.set).toBe("Identity.OrderError")
     expect(callable.set).toBe("Identity.OrderError")
-    expect(callable().set).toBe("Identity.OrderError")
+    expect(callable.with({}).set).toBe("Identity.OrderError")
     expect(Object.keys(orderErr)).toContain("set")
     expect(Object.keys(callable)).toContain("set")
   })

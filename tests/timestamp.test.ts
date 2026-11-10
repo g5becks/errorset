@@ -14,7 +14,7 @@ const makeSet = (config?: { includeTimestamp: boolean }) =>
 const shapes = (UserError: ReturnType<typeof makeSet>) => {
   const template = UserError.not_found`User ${"id"} not found`({ id: "1" })
   const callable = UserError.invalid`Invalid user data`
-  const called = callable()
+  const called = callable.with({})
   return { template, callable, called }
 }
 

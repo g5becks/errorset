@@ -187,20 +187,21 @@ This is the key insight: template holes aren't just for interpolation. They tell
 
 ### Simplified Syntax for No-Context Errors
 
-When your error message doesn't need any context data, you can use the template literal directly without calling it:
+When your error message doesn't need any context data, use the template literal directly:
 
 ```typescript
-// No template holes — use directly without ({})
+// No template holes — the template itself is the error
 return UserError.invalid`Invalid user data`;
 
-// This is cleaner than the old syntax:
-// return UserError.invalid`Invalid user data`({});  // No longer needed!
-
-// You can still add a cause if needed:
-return UserError.invalid`Invalid user data`({ cause: previousError });
+// Add a cause with .with(): returns a new error, the original is unchanged
+return UserError.invalid`Invalid user data`.with({ cause: previousError });
 ```
 
-This works because errors without template holes return a `CallableErr` — an object that is both an error value AND a function. You can use it directly as an error, or call it with `{ cause }` to chain errors.
+Errors without template holes are plain error objects (`NoContextErr`), like every other error:
+they serialize with `JSON.stringify` and can be sent through `structuredClone`, `postMessage`
+and worker or IPC boundaries. A structured clone carries the data (`set`, `kind`, `message`,
+`data`, `cause`) but not the brand symbol, so guards don't recognize the clone; rehydration
+with `from()` is planned for 0.5.0.
 
 ### Error Chaining
 
@@ -585,7 +586,7 @@ unchanged. Stack traces are not included in the JSON output.
 | `errorSet(name, kinds).init<T>(config)` | Define with per-instance config |
 | `type X = typeof X.Type` | Type-value identity |
 | `Set.kind\`msg\`` | Create error (no context) |
-| `Set.kind\`msg\`({ cause })` | Create with cause (no context) |
+| `Set.kind\`msg\`.with({ cause })` | Create with cause (no context) |
 | `Set.kind\`msg ${"field"}\`(data)` | Create error with context |
 | `Set.kind\`msg ${"field"}\`(data, { cause })` | Create with context and cause |
 | `Set(value)` | Set-level guard |

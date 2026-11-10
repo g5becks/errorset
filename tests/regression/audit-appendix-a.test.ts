@@ -141,8 +141,8 @@ describe("A3 reserved kind names", () => {
   })
 })
 
-describe("A4 callable no-context error", () => {
-  test.failing("A4 [TASK-060] structuredClone of a no-context error succeeds", () => {
+describe("A4 no-context error shape", () => {
+  test("A4 [TASK-060] structuredClone of a no-context error succeeds", () => {
     const E = errorSet("E", ["boom"]).init<IdCtx>()
     const noContext = E.boom`static message`
     const clone = structuredClone(noContext) as {

@@ -31,10 +31,7 @@ export type ErrProtocol = typeof ERR_PROTOCOL
  * @internal
  */
 const hasBrand = (value: unknown): value is { readonly [ERR]: ErrProtocol } => {
-  if (
-    value === null ||
-    (typeof value !== "object" && typeof value !== "function")
-  ) {
+  if (typeof value !== "object" || value === null) {
     return false
   }
   return (value as { [ERR]?: unknown })[ERR] === ERR_PROTOCOL
@@ -110,7 +107,7 @@ export type Err<
 export function isErr(
   value: unknown
 ): value is Err<string, Record<string, unknown>> {
-  // Objects and callable errors (functions) both carry the brand
+  // Every error is a plain object carrying the brand
   return hasBrand(value)
 }
 
@@ -277,32 +274,34 @@ export type ErrorCreator<
 > = (entity: Pick<T, K>, options?: ErrorOptions) => Err<Kind, Pick<T, K>, N>
 
 /**
- * A callable error that is both an error value AND a function.
- * When no template keys are present, this allows direct use as an error
- * while still supporting optional cause via function call.
+ * Error created from a template without holes: a plain error object (so it survives
+ * `JSON.stringify` and `structuredClone`) with a non-enumerable `with()` that returns
+ * a new error of the same kind and message with options such as `cause`.
  *
  * @example
  * ```ts
- * // Use directly as error value
+ * // Use directly as an error value
  * return BackupError.config_invalid`S3 configuration required`
  *
- * // Or call with options to add cause
- * return BackupError.config_invalid`S3 configuration required`({ cause: someError })
+ * // Add a cause: returns a new error, the original is unchanged
+ * return BackupError.config_invalid`S3 configuration required`.with({ cause: someError })
  * ```
  */
-export type CallableErr<Kind extends string, N extends string = string> = Err<
+export type NoContextErr<Kind extends string, N extends string = string> = Err<
   Kind,
   Record<string, never>,
   N
-> &
-  ((options?: ErrorOptions) => Err<Kind, Record<string, never>, N>)
+> & {
+  /** Returns a new error with the same set, kind and message, plus these options */
+  with(options: ErrorOptions): NoContextErr<Kind, N>
+}
 
 /**
  * Tagged template function for a specific error kind.
  * Constrains template holes to valid field names from the entity type.
  *
- * When called with no template holes, returns a CallableErr that can be
- * used directly as an error value or called with options to add a cause.
+ * When called with no template holes, returns a plain error object (NoContextErr)
+ * that can be used directly; `.with(options)` returns a new one with a cause.
  *
  * When called with template holes, returns an ErrorCreator that must be
  * called with entity data containing the referenced fields.
@@ -312,8 +311,8 @@ export type KindConstructor<
   T extends Record<string, unknown>,
   N extends string = string,
 > = {
-  // Overload for no template holes - returns CallableErr
-  (strings: TemplateStringsArray): CallableErr<Kind, N>
+  // Overload for no template holes - returns a plain error object
+  (strings: TemplateStringsArray): NoContextErr<Kind, N>
   // Overload for template holes - returns ErrorCreator
   <K extends keyof T & string>(
     strings: TemplateStringsArray,
@@ -379,8 +378,7 @@ const serializeCause = (cause: unknown): unknown => {
 }
 
 /**
- * Shared `toJSON` for both error shapes. Without it the callable no-context
- * error (a function) disappears from `JSON.stringify` output.
+ * Shared `toJSON` for every error: `{ set, kind, message, data, cause?, timestamp? }`.
  */
 function errToJSON(this: SerializableErr): ErrJSON {
   const json: ErrJSON = {
@@ -515,11 +513,45 @@ export function createKindFunction<
   }
   const serialization = serializationDescriptors(errToString)
 
+  // No-context errors (templates without holes) are plain objects; with() returns a
+  // new error with the same message plus options, so errors never need mutating.
+  const createNoContext = (
+    message: string,
+    options: ErrorOptions | undefined,
+    constructorOpt: unknown
+  ): NoContextErr<Kind, N> => {
+    const data = {} as Record<string, never>
+    const err = {
+      [ERR]: ERR_PROTOCOL,
+      set: name,
+      kind,
+      message,
+      data,
+      ...(options?.cause !== undefined && { cause: options.cause }),
+      [INSPECT]() {
+        return `${name}.${kind} ${JSON.stringify(data)}`
+      },
+    }
+    Object.defineProperties(err, noContextDescriptors)
+    applyCreationConfig(err, constructorOpt, instanceConfig)
+    return err as unknown as NoContextErr<Kind, N>
+  }
+  const withOptions = function (
+    this: { message: string },
+    options: ErrorOptions
+  ): NoContextErr<Kind, N> {
+    return createNoContext(this.message, options, withOptions)
+  }
+  const noContextDescriptors: PropertyDescriptorMap = {
+    ...serialization,
+    with: { value: withOptions },
+  }
+
   // The dual-purpose function
   const kindFn = <K extends keyof T & string>(
     stringsOrValue: TemplateStringsArray | object | null | undefined,
     ...keys: K[]
-  ): ErrorCreator<Kind, T, K, N> | CallableErr<Kind, N> | boolean => {
+  ): ErrorCreator<Kind, T, K, N> | NoContextErr<Kind, N> | boolean => {
     // Check if called as tagged template literal
     // TemplateStringsArray is an array with a 'raw' property
     if (
@@ -529,78 +561,11 @@ export function createKindFunction<
     ) {
       const strings = stringsOrValue as TemplateStringsArray
 
-      // When no template keys, return a CallableErr directly
+      // When no template keys, return a plain error object directly
       // This allows: BackupError.config_invalid`S3 config required`
-      // Instead of: BackupError.config_invalid`S3 config required`({})
+      // and, with options: BackupError.config_invalid`S3 config required`.with({ cause })
       if (keys.length === 0) {
-        const message = strings.join("")
-        const data = {} as Record<string, never>
-
-        // Create callable error function
-        const callableErr = (options?: ErrorOptions) => {
-          const newErr = {
-            [ERR]: ERR_PROTOCOL,
-            set: name,
-            kind,
-            message,
-            data,
-            ...(options?.cause !== undefined && { cause: options.cause }),
-            [INSPECT]() {
-              return `${name}.${kind} ${JSON.stringify(data)}`
-            },
-          } as Err<Kind, Record<string, never>, N>
-
-          Object.defineProperties(newErr, serialization)
-          applyCreationConfig(newErr, callableErr, instanceConfig)
-          return newErr
-        }
-
-        // Attach error properties to the function itself
-        Object.defineProperty(callableErr, ERR, {
-          value: ERR_PROTOCOL,
-          writable: false,
-          enumerable: true,
-          configurable: false,
-        })
-        Object.defineProperty(callableErr, "set", {
-          value: name,
-          writable: false,
-          enumerable: true,
-          configurable: false,
-        })
-        Object.defineProperty(callableErr, "kind", {
-          value: kind,
-          writable: false,
-          enumerable: true,
-          configurable: false,
-        })
-        Object.defineProperty(callableErr, "message", {
-          value: message,
-          writable: false,
-          enumerable: true,
-          configurable: false,
-        })
-        Object.defineProperty(callableErr, "data", {
-          value: data,
-          writable: false,
-          enumerable: true,
-          configurable: false,
-        })
-        Object.defineProperty(callableErr, INSPECT, {
-          value() {
-            return `${name}.${kind} ${JSON.stringify(data)}`
-          },
-          writable: false,
-          enumerable: false,
-          configurable: false,
-        })
-
-        Object.defineProperties(callableErr, serialization)
-
-        // Capture stack trace on the callable error itself
-        applyCreationConfig(callableErr, kindFn, instanceConfig)
-
-        return callableErr as unknown as CallableErr<Kind, N>
+        return createNoContext(strings.join(""), undefined, kindFn)
       }
 
       // Return error creator function for template with keys
@@ -743,7 +708,7 @@ const createMemberGuard = <
 ): SetGuard<Kinds, T, N> => {
   const accepts = membershipTest(members)
   const guard = (value: unknown): value is Err<Kinds, Partial<T>, N> => {
-    // Must carry a brand this copy understands (objects and callable errors)
+    // Must carry a brand this copy understands
     if (!hasBrand(value)) {
       return false
     }
@@ -1101,8 +1066,7 @@ const toCaughtError = (caught: unknown): Error =>
 
 /**
  * Attaches the caught value as `cause` to the mapper's error unless it already has one.
- * The mapper's error is not modified: a callable no-context error is called with
- * `{ cause }`, and an object error is copied with every property plus `cause`.
+ * The mapper's error is not modified: it is copied with every property plus `cause`.
  *
  * @internal
  */
@@ -1112,9 +1076,6 @@ const withCaughtCause = <E>(mapped: E, caught: unknown): E => {
     (mapped as { cause?: unknown }).cause !== undefined
   ) {
     return mapped
-  }
-  if (typeof mapped === "function") {
-    return (mapped as (options: ErrorOptions) => E)({ cause: caught })
   }
   const descriptors = Object.getOwnPropertyDescriptors(mapped)
   const ordered: PropertyDescriptorMap = {}

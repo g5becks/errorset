@@ -13,6 +13,7 @@ import {
   type HasDuplicates,
   isErr,
   type KindFunction,
+  type NoContextErr,
   type NoDuplicates,
 } from "../../src/index.ts"
 
@@ -343,34 +344,35 @@ errorSet("BadError3", ["x", "x"])
 errorSet("BadError4", ["a", "b", "c", "b"])
 
 // =============================================================================
-// CallableErr - Simplified syntax for no-context errors
+// NoContextErr - templates without holes return a plain error object (0.4.0)
 // =============================================================================
 
-// No template holes should return CallableErr (usable directly)
-const callableErr = UserError.invalid`Simple error message`
+// No template holes: a plain error object, usable directly
+const noContextErr = UserError.invalid`Simple error message`
+expectTypeOf(noContextErr).toEqualTypeOf<NoContextErr<"invalid", "UserError">>()
+expectTypeOf(noContextErr).toExtend<
+  Err<"invalid", Record<string, never>, "UserError">
+>()
 
-// CallableErr should be assignable to Err
-expectTypeOf(callableErr).toExtend<Err<"invalid", Record<string, never>>>()
-
-// CallableErr should be callable with options
-const withCause = callableErr({
+// Options (cause) go through with(), which returns a new error of the same kind
+const withCause = noContextErr.with({
   cause: UserError.not_found`Cause ${"id"}`({ id: "1" }),
 })
-expectTypeOf(withCause).toExtend<Err<"invalid", Record<string, never>>>()
+expectTypeOf(withCause).toEqualTypeOf<NoContextErr<"invalid", "UserError">>()
 
-// CallableErr should have error properties
-expectTypeOf(callableErr.kind).toEqualTypeOf<"invalid">()
-expectTypeOf(callableErr.message).toEqualTypeOf<string>()
-expectTypeOf(callableErr.data).toEqualTypeOf<Record<string, never>>()
+// It is no longer callable
+// @ts-expect-error - no-context errors are objects, not functions, since 0.4.0
+noContextErr({ cause: "x" })
 
-// isErr should work on CallableErr
-expectTypeOf(isErr(callableErr)).toEqualTypeOf<boolean>()
+// It has the error properties
+expectTypeOf(noContextErr.kind).toEqualTypeOf<"invalid">()
+expectTypeOf(noContextErr.message).toEqualTypeOf<string>()
+expectTypeOf(noContextErr.data).toEqualTypeOf<Record<string, never>>()
 
-// Set-level guard should work on CallableErr
-expectTypeOf(UserError(callableErr)).toEqualTypeOf<boolean>()
-
-// Kind-level guard should work on CallableErr
-expectTypeOf(UserError.invalid(callableErr)).toEqualTypeOf<boolean>()
+// Guards accept it
+expectTypeOf(isErr(noContextErr)).toEqualTypeOf<boolean>()
+expectTypeOf(UserError(noContextErr)).toEqualTypeOf<boolean>()
+expectTypeOf(UserError.invalid(noContextErr)).toEqualTypeOf<boolean>()
 
 // With template holes should still return ErrorCreator (requires entity data)
 const withHoles = UserError.not_found`User ${"id"} not found`({ id: "123" })
@@ -495,6 +497,6 @@ const withNativeCause = UserError.not_found`User ${"id"} not found`(
   { cause: new TypeError("socket hang up") }
 )
 expectTypeOf(withNativeCause.cause).toEqualTypeOf<unknown>()
-expectTypeOf(UserError.invalid`Invalid`({ cause: "plain value" })).toExtend<
-  Err<"invalid", Record<string, never>, "UserError">
->()
+expectTypeOf(
+  UserError.invalid`Invalid`.with({ cause: "plain value" })
+).toExtend<Err<"invalid", Record<string, never>, "UserError">>()
