@@ -106,11 +106,13 @@ init<T extends Record<string, unknown>>(config?: ErrorSetConfig): ErrorSet<Kinds
 **Config Options:**
 ```typescript
 type ErrorSetConfig = {
+  includeStack?: boolean;      // stack trace on each error (V8 engines only)
+  stackDepth?: number;         // max stack depth when includeStack is on
+  includeTimestamp?: boolean;  // err.timestamp = Date.now(); absent when off
+  /** @deprecated no effect; removed in 0.4.0 */
   format?: "pretty" | "json" | "minimal";
-  includeStack?: boolean;
-  includeTimestamp?: boolean;
+  /** @deprecated no effect; removed in 0.4.0 */
   colors?: boolean;
-  stackDepth?: number;
 }
 ```
 
@@ -123,7 +125,7 @@ const UserError = errorSet("UserError", ["not_found"]).init<User>();
 const VerboseError = errorSet("VerboseError", ["error"])
   .init<User>({
     includeStack: true,
-    format: "pretty"
+    includeTimestamp: true
   });
 ```
 
@@ -525,11 +527,13 @@ function configure(options: Partial<Config>): void
 **Options:**
 ```typescript
 type Config = {
+  includeStack: boolean;      // Default: false (V8 engines only)
+  stackDepth: number;         // Default: 10
+  includeTimestamp: boolean;  // Default: false; sets err.timestamp = Date.now(), absent when false
+  /** @deprecated no effect; removed in 0.4.0. Format errors in your logger. */
   format: "pretty" | "json" | "minimal";  // Default: "pretty"
-  includeStack: boolean;                   // Default: false
-  includeTimestamp: boolean;               // Default: false
+  /** @deprecated no effect; removed in 0.4.0. */
   colors: boolean;                         // Default: true
-  stackDepth: number;                      // Default: 10
 }
 ```
 
@@ -538,17 +542,10 @@ type Config = {
 import { configure } from "@takinprofit/errorset";
 
 // Development config
-configure({
-  format: "pretty",
-  colors: true,
-  includeStack: true
-});
+configure({ includeStack: true });
 
 // Production config
-configure({
-  format: "json",
-  includeTimestamp: true
-});
+configure({ includeTimestamp: true });
 ```
 
 ---

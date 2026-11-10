@@ -307,14 +307,9 @@ const serializationDescriptors = (
  */
 function captureStack(
   target: object,
-  constructorOpt?: unknown,
-  instanceConfig?: Partial<Config>
+  constructorOpt: unknown,
+  config: Readonly<Config>
 ): void {
-  const globalConfig = getConfig()
-  const config = instanceConfig
-    ? { ...globalConfig, ...instanceConfig }
-    : globalConfig
-
   if (!config.includeStack) {
     return
   }
@@ -333,6 +328,37 @@ function captureStack(
     // Restore original limit
     Error.stackTraceLimit = originalLimit
   }
+}
+
+/**
+ * Applies the creation-time options of the effective config (global merged with
+ * the set's own) to a new error: `timestamp` when `includeTimestamp` is on, and a
+ * stack trace when `includeStack` is on. When `includeTimestamp` is off the
+ * `timestamp` property is absent, not `undefined`.
+ *
+ * @internal
+ */
+function applyCreationConfig(
+  target: object,
+  constructorOpt: unknown,
+  instanceConfig?: Partial<Config>
+): void {
+  const globalConfig = getConfig()
+  const config = instanceConfig
+    ? { ...globalConfig, ...instanceConfig }
+    : globalConfig
+
+  if (config.includeTimestamp) {
+    // Callable errors are functions whose fields are read-only own properties
+    Object.defineProperty(target, "timestamp", {
+      value: Date.now(),
+      writable: typeof target !== "function",
+      enumerable: true,
+      configurable: false,
+    })
+  }
+
+  captureStack(target, constructorOpt, config)
 }
 
 /**
@@ -409,7 +435,7 @@ export function createKindFunction<
           } as Err<Kind, Record<string, never>>
 
           Object.defineProperties(newErr, serialization)
-          captureStack(newErr, callableErr, instanceConfig)
+          applyCreationConfig(newErr, callableErr, instanceConfig)
           return newErr
         }
 
@@ -450,7 +476,7 @@ export function createKindFunction<
         Object.defineProperties(callableErr, serialization)
 
         // Capture stack trace on the callable error itself
-        captureStack(callableErr, kindFn, instanceConfig)
+        applyCreationConfig(callableErr, kindFn, instanceConfig)
 
         return callableErr as unknown as CallableErr<Kind>
       }
@@ -492,7 +518,7 @@ export function createKindFunction<
         Object.defineProperties(err, serialization)
 
         // Capture stack trace if enabled (V8 engines only)
-        captureStack(err, creator, instanceConfig)
+        applyCreationConfig(err, creator, instanceConfig)
 
         return err
       }

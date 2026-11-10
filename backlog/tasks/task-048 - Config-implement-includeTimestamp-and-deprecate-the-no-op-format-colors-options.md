@@ -3,9 +3,11 @@ id: TASK-048
 title: >-
   Config: implement includeTimestamp and deprecate the no-op format/colors
   options
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@claude'
 created_date: '2026-11-10T17:35:00Z'
+updated_date: '2026-11-10T19:07:00Z'
 labels:
   - config
 milestone: m-0
@@ -38,3 +40,13 @@ type: bug
 - [ ] #4 CHANGELOG.md has an entry under ## [Unreleased] describing the change
 - [ ] #5 bash scripts/ci-local.sh HEAD prints RESULT: PASS
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Tests first (tests/config.test.ts additions or a new file): global and per-set includeTimestamp on template, callable and called-callable errors; absent (not undefined) when off; per-set false overrides global true; toJSON includes timestamp; configure() with format/colors does not throw.
+2. Compute the effective config once per creation (shared by stack capture and timestamp); set timestamp: Date.now() when enabled.
+3. @deprecated JSDoc on format, colors and the Format type.
+4. Fix README and LLMS.txt configuration sections; CHANGELOG.
+5. Gate, bench, ci-local.
+<!-- SECTION:PLAN:END -->

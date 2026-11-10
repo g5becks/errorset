@@ -130,7 +130,7 @@ You can pass configuration options to `.init<T>()`:
 const VerboseError = errorSet("VerboseError", ["error"])
   .init<User>({
     includeStack: true,
-    format: "pretty"
+    includeTimestamp: true
   });
 ```
 
@@ -430,20 +430,25 @@ const result = await DbError.captureAsync(
 import { configure } from "@takinprofit/errorset";
 
 configure({
-  format: "pretty" | "json" | "minimal",
-  includeStack: boolean,     // Stack traces (V8 only, off by default)
-  includeTimestamp: boolean, // Timestamps (off by default)
-  colors: boolean,           // ANSI colors in pretty format
-  stackDepth: number,        // Max stack trace depth
+  includeStack: boolean,     // Stack traces (V8 engines only, off by default)
+  stackDepth: number,        // Max stack trace depth when includeStack is on (default 10)
+  includeTimestamp: boolean, // Set err.timestamp = Date.now() at creation (off by default)
 });
 
 // Environment-based configuration
 configure(
   process.env.NODE_ENV === "development"
-    ? { format: "pretty", colors: true, includeStack: true }
-    : { format: "json", includeTimestamp: true }
+    ? { includeStack: true }
+    : { includeTimestamp: true }
 );
 ```
+
+The same options can be passed per set to `.init<T>(config)`; per-set values override the
+global ones. When `includeTimestamp` is off, errors have no `timestamp` property at all.
+
+> **Deprecated:** `format` and `colors` are still accepted but have no effect, and they are
+> removed in 0.4.0. Format errors in your logger instead, using `JSON.stringify(err)` or
+> `String(err)` (see [Serialization and Logging](#serialization-and-logging)).
 
 Stack traces are disabled by default because error sets represent *expected* failures, not bugs. Enable them during development if you need to trace where errors originate.
 

@@ -16,7 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `includeTimestamp` now works, globally and per set: errors of both shapes get a numeric `timestamp` (`Date.now()`) at creation, which is also included in `toJSON` output. When it is off, the property is absent. It was documented before but never implemented.
 - Building from source with Bun 1.3.x produced an empty `dist/index.js` (the bundler dropped every module because the package declared `"sideEffects": false`). `sideEffects` is now `["./src/*.ts"]`: source files count as side-effectful for our own build, and the published `dist/` files remain side-effect free for consumer bundlers (an unused import is still dropped entirely). Bun 1.4 output is byte-identical; published tarballs were never affected when built with Bun 1.4.
+
+### Deprecated
+
+- The `format` and `colors` configuration options (and the `Format` type). They never had any effect; `configure()` still accepts them, and they are removed in 0.4.0. Format errors in your logger with `JSON.stringify(err)` or `String(err)`.
 
 ### Changed
 

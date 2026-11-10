@@ -4,10 +4,9 @@
  */
 
 /**
- * Output format for error messages.
- * - "pretty": Human-readable format with colors (development)
- * - "json": Structured JSON format (production/logging)
- * - "minimal": Compact format for performance-critical code
+ * Values accepted by the `format` option.
+ *
+ * @deprecated No effect: errorset never reads this option. It is removed in 0.4.0; format errors in your logger instead (`JSON.stringify(err)`, `String(err)`).
  */
 export type Format = "pretty" | "json" | "minimal"
 
@@ -15,13 +14,17 @@ export type Format = "pretty" | "json" | "minimal"
  * Configuration options for the errorset library.
  */
 export type Config = {
-  /** Output format for error messages */
+  /**
+   * @deprecated No effect: errorset never reads this option. It is removed in 0.4.0; format errors in your logger instead (`JSON.stringify(err)`, `String(err)`).
+   */
   format: Format
   /** Include stack traces in errors (V8 engines only) */
   includeStack: boolean
-  /** Include timestamp when error was created */
+  /** Set `timestamp` (`Date.now()`) on each error at creation; absent when false */
   includeTimestamp: boolean
-  /** Enable ANSI colors in pretty format */
+  /**
+   * @deprecated No effect: errorset never reads this option. It is removed in 0.4.0; format errors in your logger instead (`JSON.stringify(err)`, `String(err)`).
+   */
   colors: boolean
   /** Maximum stack trace depth when includeStack is true */
   stackDepth: number
@@ -50,18 +53,11 @@ let currentConfig: Config = { ...defaultConfig }
  *
  * @example
  * ```ts
- * // Development configuration
- * configure({
- *   format: "pretty",
- *   colors: true,
- *   includeStack: true,
- * })
+ * // Development: capture stack traces on errors
+ * configure({ includeStack: true, stackDepth: 20 })
  *
- * // Production configuration
- * configure({
- *   format: "json",
- *   includeTimestamp: true,
- * })
+ * // Production: record when each error was created
+ * configure({ includeTimestamp: true })
  * ```
  */
 export function configure(options: Partial<Config>): void {
