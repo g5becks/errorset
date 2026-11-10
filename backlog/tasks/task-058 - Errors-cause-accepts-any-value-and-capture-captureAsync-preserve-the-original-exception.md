@@ -3,11 +3,11 @@ id: TASK-058
 title: >-
   Errors: cause accepts any value and capture/captureAsync preserve the original
   exception
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-11-10T17:35:00Z'
-updated_date: '2026-11-10T20:21:00Z'
+updated_date: '2026-11-10T20:53:00Z'
 labels:
   - api
   - breaking
@@ -36,11 +36,11 @@ type: bug
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 cause accepts unknown (native Error passes type-check); type tests updated
-- [ ] #2 capture and captureAsync attach the caught value as cause by default, including non-Error throws, with a readable message (tests for all listed cases)
-- [ ] #3 A6 regression case passes
-- [ ] #4 CHANGELOG.md lists the change under ## [Unreleased] > ### Breaking changes with migration steps
-- [ ] #5 bash scripts/ci-local.sh HEAD prints RESULT: PASS
+- [x] #1 cause accepts unknown (native Error passes type-check); type tests updated
+- [x] #2 capture and captureAsync attach the caught value as cause by default, including non-Error throws, with a readable message (tests for all listed cases)
+- [x] #3 A6 regression case passes
+- [x] #4 CHANGELOG.md lists the change under ## [Unreleased] > ### Breaking changes with migration steps
+- [x] #5 bash scripts/ci-local.sh HEAD prints RESULT: PASS
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -57,4 +57,13 @@ type: bug
 
 <!-- SECTION:NOTES:BEGIN -->
 - RESUME STATE (session hit its usage limit): code committed at HEAD (fix(errors)! TASK-058). Strict gate passed (214 tests, 100% coverage; 6 test.failing remain: A4, A5, A8 x2, A9, A11). Remaining for this task: run `bash scripts/ci-local.sh HEAD`, then check ACs 1-5, add full notes (tests in tests/capture-cause.test.ts; tests/support/err-cause.ts helper narrows cause in migrated tests; renderThrown uses JSON+cycle guard with Object.prototype.toString fallback instead of util.inspect to keep the bundle free of runtime imports), set Done.
+
+- Outcome: ErrorOptions.cause and Err.cause are unknown (ES2022 semantics); native Errors and any value type-check (type test added). capture/captureAsync pass the mapper an Error (non-Error throws wrapped with a readable message) and attach the original caught value as cause unless the mapper set one. The mapper's error is not modified: callable no-context results are called with { cause }; object results are copied with all own descriptors (brand, toJSON/toString, inspect, stack) and cause inserted after data. This copy-not-mutate approach keeps working once TASK-061 freezes errors.
+- Decision: renderThrown uses strings as-is, String() for other primitives, JSON with a WeakSet cycle guard ("[Circular]") and bigint-to-string for objects, and the Object.prototype.toString tag only when JSON fails (e.g. a throwing toJSON). No node:util/Bun.inspect import, so the bundle stays free of runtime-specific imports.
+- toJSON: native Error cause -> { name, message, code? } (string/number code), no stack.
+- Tests: tests/capture-cause.test.ts (14): sync throw, async rejection, sync throw inside an async fn, Error subclass with code/errno (+ JSON code), plain object (JSON message, original as cause), string, cyclic/bigint/number/undefined/null/throwing-toJSON/null-prototype rendering, mapper-provided cause kept, callable mapper result, mapper's object not modified (keys set, kind, message, data, cause), no-throw passthrough; cause accepts native Error and plain values; errorset causes narrow with isErr. A6 regression flipped to test. 214 tests, 100% coverage; 6 test.failing remain (A4, A5, A8 x2, A9, A11).
+- Existing tests migrated (intended API change): reads of err.cause?.kind/data/message now narrow through tests/support/err-cause.ts (isErr assertion), assertions unchanged; the chain-walk loop narrows with isErr; the type test asserts cause is unknown; the serialization test no longer needs a cast for a native cause.
+- Docs: README Error Chaining (narrowing, native causes) and capture/captureAsync (cause attached, message rendering, JSON shape); LLMS.txt cause types; CHANGELOG ### Breaking changes entry with migration.
+- Breaking change: yes; cause is unknown (narrow before reading), captured errors carry a cause, thrown-object messages are JSON.
+- Verification: strict gate passes. Verified with scripts/ci-local.sh (c570796, PASS); GitHub Actions unavailable (billing lock).
 <!-- SECTION:NOTES:END -->
