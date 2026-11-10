@@ -7,7 +7,7 @@ status: In Progress
 assignee:
   - '@claude'
 created_date: '2026-11-10T17:35:00Z'
-updated_date: '2026-11-10T20:18:00Z'
+updated_date: '2026-11-10T20:21:00Z'
 labels:
   - api
   - breaking
@@ -52,3 +52,9 @@ type: bug
 4. Tests: sync throw, async rejection, sync throw inside an async fn, Error subclass with code (+ toJSON code), plain object, string, cyclic object, mapper-provided cause kept, callable mapper result. Flip A6. Type tests: native Error cause compiles.
 5. CHANGELOG breaking + docs; gate; ci-local.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+- RESUME STATE (session hit its usage limit): code committed at HEAD (fix(errors)! TASK-058). Strict gate passed (214 tests, 100% coverage; 6 test.failing remain: A4, A5, A8 x2, A9, A11). Remaining for this task: run `bash scripts/ci-local.sh HEAD`, then check ACs 1-5, add full notes (tests in tests/capture-cause.test.ts; tests/support/err-cause.ts helper narrows cause in migrated tests; renderThrown uses JSON+cycle guard with Object.prototype.toString fallback instead of util.inspect to keep the bundle free of runtime imports), set Done.
+<!-- SECTION:NOTES:END -->
