@@ -3,9 +3,11 @@ id: TASK-051
 title: >-
   Release tooling: CHANGELOG, verified retroactive tags, scripts/release.ts and
   trusted-publishing workflow
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@claude'
 created_date: '2026-11-10T17:35:00Z'
+updated_date: '2026-11-10T19:31:00Z'
 labels:
   - release
 milestone: m-0
@@ -53,3 +55,13 @@ There is no CHANGELOG, there are no git tags for the published 0.1.0, 0.2.1 and 
 - [ ] #4 release.yml uses trusted publishing with provenance, skips already-published versions, checks tag/version, pins actions; actionlint passes
 - [ ] #5 CONTRIBUTING.md documents the release procedure
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. CHANGELOG: backfill 0.1.0 (2026-01-05), 0.2.1 (2026-01-06), 0.3.0 (2026-01-17) from git history; keep [Unreleased].
+2. Annotated local tags v0.1.0=8d09ce5, v0.2.1=301f969, v0.3.0=a627c65 (verified byte-identical vs npm tarballs; evidence in notes).
+3. scripts/release.ts + release:prepare (port of StrataDB): clean tree, branch release/v<v>, newer version, roll [Unreleased], bump, commit, annotated tag, ci-local on tag, worktree in ../errorset-release/v<v>, pack, file-list check, SHA-512, isolated consumer smoke (create/guard/recover), RELEASE_NOTES.md, print maintainer commands; --dry-run writes nothing. Test in a temporary clone.
+4. .github/workflows/release.yml (v* tags, SHA-pinned, full gate, tag/version check, skip if published, npm publish --provenance via OIDC). actionlint.
+5. CONTRIBUTING.md release procedure.
+<!-- SECTION:PLAN:END -->

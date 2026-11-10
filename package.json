@@ -51,6 +51,7 @@
     "lint:fix": "bunx ultracite fix",
     "prepare": "lefthook install",
     "prepublishOnly": "bun run typecheck && bun run test:types && bun run test && bun run test:consumer",
+    "release:prepare": "bun scripts/release.ts",
     "test": "bun test",
     "test:consumer": "bun run build && bun scripts/smoke-consumer.ts",
     "test:types": "tsc --noEmit -p tests/types/tsconfig.json",
