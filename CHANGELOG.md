@@ -7,9 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking changes
+
+- **Merged guards are typed per set, and `kinds` lists each name once (audit A9, TASK-067).** A merged guard used to type `data` as `Record<string, unknown>`; it now narrows to the union of the merged sets' error types, discriminated by `set`, so reading a `data` key that not every merged set has no longer compiles until you narrow (`if (err.set === "DbError") err.data.query`). `merged.kinds` no longer repeats a kind name that several sets share (membership was already per `(set, kind)` pair since 0.4.0, and is unchanged).
+  *Migration:* narrow merged errors by `set` (or with the original set's guard) before reading set-specific `data` fields. Code that counted or indexed duplicate names in `merged.kinds` must expect each name once.
+
 ### Added
 
 - **`XError.from(value)` rehydrates errors after JSON, `structuredClone`, workers or HTTP (audit A5, TASK-065).** It validates `{ set, kind, message, data, cause?, timestamp? }` (the set's own name, one of its kinds, a string message, a plain-object `data`, a numeric `timestamp`) and returns a branded, frozen error that every guard recognizes, with the same shape, `toJSON`, `toString` and (for empty `data`) `.with()` as a created error; anything else returns `undefined`. Extra fields are ignored, `timestamp` is kept, no stack is captured, `cause` is kept as-is (rehydrate an errorset cause with its own set's `from`), and a live error of the set is returned unchanged. There is no top-level `fromJSON`: rehydration needs the set to validate the kind.
+
+- **Variadic, set-aware `merge` with `recover` and `inspect` (audit A9, TASK-067).** `merge(a, b, c, …)` and `X.merge(…others)` take any number of sets or merged guards; `(set, kind)` pairs are de-duplicated. The merged guard (`MergedGuard<E>`) narrows to the union of the sets' error types and has `recover` (exhaustive over every `(set, kind)` pair, or with a `_` catch-all), `inspect` and `merge`; handlers are nested by set name then kind (`{ OrderError: { rejected: e => … }, _: e => … }`) so sets that share a kind name get separate handlers. New exported types: `MergedGuard`, `MergedRecoverHandlers`, `MergedInspectHandlers`, `MergeInput`, `GuardedError`.
 
 ### Fixed
 

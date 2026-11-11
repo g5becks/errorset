@@ -444,29 +444,40 @@ function processCheckout(id: string): Receipt | UserError | DbError {
 
 ### `merge` — Combine at Boundaries
 
-Merge error sets when you need to check for errors from multiple sources:
+Merge error sets when you need to check for errors from multiple sources. `merge` takes any
+number of sets (or merged guards); `X.merge(...)` does the same starting from `X`:
 
 ```typescript
-const UserError = errorSet("UserError", ["not_found", "suspended"]).init<User>();
-const DbError = errorSet("DbError", ["timeout", "connection"]).init<DbContext>();
+import { merge } from "@takinprofit/errorset";
 
-const ServiceError = UserError.merge(DbError);
+const UserError = errorSet("UserError", ["not_found", "suspended"]).init<User>();
+const DbError = errorSet("DbError", ["timeout", "not_found"]).init<DbContext>();
+const CacheError = errorSet("CacheError", ["miss"]).init<CacheKey>();
+
+const ServiceError = merge(UserError, DbError, CacheError); // or UserError.merge(DbError, CacheError)
 
 if (ServiceError(result)) {
-  // result.kind is "not_found" | "suspended" | "timeout" | "connection"
+  // result is UserError | DbError | CacheError: a union discriminated by `set`
+  if (result.set === "DbError") {
+    console.log(result.data.query); // narrowed to DbContext's data
+  }
 }
 ```
 
-**Note**: Merged sets lose data typing. For type-safe data access, use the original sets:
+Membership is by (set, kind) pair, so sets that share a kind name (`not_found` above) stay
+distinct, and `ServiceError.kinds` lists each name once. A merged guard has `recover` and
+`inspect`, with handlers nested by set name and then kind:
 
 ```typescript
-if (ServiceError(result)) {
-  if (UserError(result)) {
-    console.log(result.data.name);  // Type-safe
-  } else if (DbError(result)) {
-    console.log(result.data.query); // Type-safe
-  }
-}
+const status = ServiceError.recover(result, {
+  UserError: { not_found: () => 404, suspended: () => 403 },
+  DbError: { not_found: () => 404 },
+  _: () => 503, // required unless every (set, kind) pair has a handler
+});
+
+ServiceError.inspect(result, {
+  DbError: { timeout: e => metrics.increment("db.timeout") },
+});
 ```
 
 ### Iteration
@@ -642,7 +653,7 @@ A live error of the set is returned unchanged.
 | `isErr(value)` | Universal guard |
 | `Set.recover(val, handlers)` | Expression-style handling |
 | `Set.inspect(val, handlers)` | Side effects only |
-| `Set.merge(other)` | Combine sets |
+| `merge(a, b, ...)` / `Set.merge(...others)` | Combine sets (set-aware, with `recover`/`inspect`) |
 | `Set.capture(fn, map)` | Wrap sync code |
 | `Set.captureAsync(fn, map)` | Wrap async code |
 | `[...Set]` / `Set.kinds` | Iterate / list kinds |

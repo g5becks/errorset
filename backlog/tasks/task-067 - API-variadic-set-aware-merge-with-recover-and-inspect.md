@@ -1,9 +1,11 @@
 ---
 id: TASK-067
 title: 'API: variadic, set-aware merge() with recover and inspect'
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@claude'
 created_date: '2026-11-10T17:35:00Z'
+updated_date: '2026-11-11T03:18:00Z'
 labels:
   - api
 milestone: m-2
@@ -36,3 +38,12 @@ type: feature
 - [ ] #3 CHANGELOG.md has an entry under ## [Unreleased] describing the change
 - [ ] #4 bash scripts/ci-local.sh HEAD prints RESULT: PASS
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Tests first: tests/merge.test.ts (variadic, dedup, chained/method equivalence, recover by (set, kind) with shared kind names, _, inherited handler keys, untyped throw, inspect) and tests/types/merge.test-d.ts (union over set, data narrowing, exhaustive recover, bad keys).
+2. merge(...guards): MergeInput (sets or merged guards), members de-duplicated by (set, kind), kinds = unique names; MergedGuard<E> with recover/inspect (handlers nested by set name then kind, own-property lookup) and merge; ErrorSet.merge variadic.
+3. Flip A9; update the integration test that asserted duplicate kinds (intended behavior change); CHANGELOG Added/Changed; README merge section; LLMS regen.
+4. Gate, commit, ci-local.
+<!-- SECTION:PLAN:END -->

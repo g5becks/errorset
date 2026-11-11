@@ -197,8 +197,8 @@ describe("A8 mutable errors", () => {
   })
 })
 
-describe("A9 merge duplicates kinds (v0.5.0)", () => {
-  test.failing("A9 [TASK-067 v0.5.0] merge lists each kind once", () => {
+describe("A9 merge duplicates kinds", () => {
+  test("A9 [TASK-067] merge lists each kind once", () => {
     expect(merge(OrderError, PositionError).kinds).toEqual([
       "invalid_symbol",
       "order_rejected",
