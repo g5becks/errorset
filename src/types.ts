@@ -1418,6 +1418,8 @@ export function toError<E extends Err<string, object, string>>(
   if (typeof Error.captureStackTrace === "function") {
     // Start the stack at the caller, and render the header with the new name
     Error.captureStackTrace(error, toError)
+    // Bun 1.3 defines the captured stack as enumerable; keep it built-in-like
+    Object.defineProperty(error, "stack", { enumerable: false })
   }
   return error as Error & { readonly cause: E }
 }
