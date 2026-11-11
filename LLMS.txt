@@ -118,7 +118,7 @@ const UserError = errorSet("UserError", ["not_found", "suspended", "invalid"])
 export type UserError = typeof UserError.Type;
 ```
 
-The `errorSet` function uses TypeScript 5.0's `const` type parameter feature to automatically infer literal types from the array. This ensures `result.kind` is typed as `"not_found" | "suspended" | "invalid"` rather than just `string`.
+The entity type can be a type alias or an `interface`. The `errorSet` function uses TypeScript 5.0's `const` type parameter feature to automatically infer literal types from the array. This ensures `result.kind` is typed as `"not_found" | "suspended" | "invalid"` rather than just `string`.
 
 With this pattern, `UserError` works like a native class or enum — you can use it in both type and value positions:
 
