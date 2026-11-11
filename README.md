@@ -73,7 +73,15 @@ bun add @takinprofit/errorset
 npm install @takinprofit/errorset
 ```
 
-Requires TypeScript 5+.
+Requires Bun ≥ 1.3.14 or Node.js ≥ 22 (ES modules and `require()`). Types are checked against
+TypeScript 5.9, 6.0 and 7.0; there is no TypeScript peer dependency.
+
+### Upgrading from 0.3
+
+0.4.0 is a breaking release: guards check which set an error came from, errors are frozen,
+no-context errors are plain objects, `recover` is exhaustive, and `cause` accepts any value.
+Follow the [migration guide](docs/migration-0.4.md), which has before/after code for every
+change and steps to audit code where several sets share a kind name.
 
 ---
 
@@ -225,8 +233,24 @@ if (ServiceError(result) && UserError(result.cause)) {
 }
 
 // Native errors work too
-return DbError.unavailable`Database unavailable`({ cause: new Error("ECONNREFUSED") });
+return DbError.unavailable`Database unavailable`.with({ cause: new Error("ECONNREFUSED") });
 ```
+
+### Immutability
+
+Errors are frozen when they are created, and so is their `data` object. Assigning to, adding
+or deleting a field throws a `TypeError` in strict mode (every ES module and class body):
+
+```typescript
+const err = UserError.not_found`User ${"id"} not found`({ id: "abc123" });
+err.message = "changed"; // TypeError (read-only property)
+err.data.id = "changed"; // TypeError (read-only property)
+```
+
+To change an error, create a new one; `.with()` and `capture` also return new errors. The
+freeze is shallow: objects nested inside `data` keep their own mutability, and the entity you
+pass in is never frozen. Freezing costs a few nanoseconds per object (about 15 ns per
+template error on the reference machine).
 
 ---
 
@@ -550,13 +574,12 @@ Errors have custom `console.log` output:
 ```typescript
 const err = UserError.not_found`User ${"id"} not found`({ id: "abc123" });
 console.log(err);
-// Output: UserError.not_found { id: "abc123" }
+// Output: UserError.not_found {"id":"abc123"}
 ```
 
 ## Serialization and Logging
 
-Both error shapes, including the no-context form (which is a function), serialize to
-plain JSON, so errors survive structured logs and HTTP responses:
+Errors serialize to plain JSON, so they survive structured logs and HTTP responses:
 
 ```typescript
 const err = UserError.not_found`User ${"id"} not found`({ id: "abc123" });
@@ -572,7 +595,7 @@ String(err);  // "UserError.not_found: User abc123 not found"
 ```
 
 The JSON shape is `{ set, kind, message, data, cause?, timestamp? }`. A `cause` that is an errorset error
-serializes the same way, recursively; a native `Error` cause becomes `{ name, message }`.
+serializes the same way, recursively; a native `Error` cause becomes `{ name, message, code? }`.
 `toJSON` and `toString` are non-enumerable, so `Object.keys(err)` and spreading are
 unchanged. Stack traces are not included in the JSON output.
 
@@ -589,6 +612,7 @@ unchanged. Stack traces are not included in the JSON output.
 | `Set.kind\`msg\`.with({ cause })` | Create with cause (no context) |
 | `Set.kind\`msg ${"field"}\`(data)` | Create error with context |
 | `Set.kind\`msg ${"field"}\`(data, { cause })` | Create with context and cause |
+| `err.set` / `err.kind` | Set name / kind of an error |
 | `Set(value)` | Set-level guard |
 | `value instanceof Set` | Alternative guard |
 | `Set.kind(value)` | Kind-level guard |
@@ -598,9 +622,12 @@ unchanged. Stack traces are not included in the JSON output.
 | `Set.merge(other)` | Combine sets |
 | `Set.capture(fn, map)` | Wrap sync code |
 | `Set.captureAsync(fn, map)` | Wrap async code |
-| `[...Set]` | Iterate kinds |
+| `[...Set]` / `Set.kinds` | Iterate / list kinds |
 | `JSON.stringify(err)` / `String(err)` | Serialize / format an error |
-| `configure(options)` | Set global options |
+| `configure(options)` | Set global options (returns a restore function) |
+| `ERR`, `ERR_PROTOCOL` | Brand symbol and protocol number |
+| `RESERVED_KINDS` | Kind names that can't be used |
+
 ---
 
 ## Philosophy

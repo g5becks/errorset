@@ -30,6 +30,10 @@ bunx -p typescript@5.9.3 tsc --noEmit && bunx -p typescript@6.0.3 tsc --noEmit
 - `bun test` enforces the coverage thresholds in `bunfig.toml`; never lower them.
 - Never weaken, skip or delete tests to make the gate pass. Add a regression test before a fix.
 - lefthook runs `ultracite fix` on pre-commit and typecheck + tests on pre-push; never bypass hooks.
+- `LLMS.txt` is generated from `README.md`: edit the README, then run `bun run docs:llms` and
+  commit both. Never edit `LLMS.txt` by hand; a test and the CI check job fail when it is stale.
+- User docs are `README.md` and `docs/` (migration guides); historical design docs live in
+  `backlog/docs/`.
 
 ## CI
 

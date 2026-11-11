@@ -30,6 +30,8 @@ jobs:
           bun-version: ${{ matrix.bun }}
       - run: bun install --frozen-lockfile
       - run: bun run lint
+      - name: LLMS.txt is generated from README.md
+        run: bun run docs:llms && git diff --exit-code LLMS.txt
       - run: bun run typecheck
       - run: bun test --coverage
       - run: bun run build

@@ -14,6 +14,9 @@ bun run typecheck && bun run lint && bun test && bun run build && bun run test:t
 locally (macOS on the host, Linux in Docker via Colima) and must print `RESULT: PASS`. Use it
 whenever GitHub Actions is unavailable; never record a GitHub run that did not happen.
 
+`LLMS.txt` is generated from `README.md` by `bun run docs:llms`; after editing the README,
+regenerate it and commit both (CI fails when it is stale).
+
 ## Release procedure
 
 Releases are prepared by a script and published by the maintainer.

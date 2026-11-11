@@ -1,9 +1,11 @@
 ---
 id: TASK-063
 title: 'Docs: README, generated LLMS.txt, design doc and 0.3→0.4 migration guide'
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@claude'
 created_date: '2026-11-10T17:35:00Z'
+updated_date: '2026-11-11T02:35:00Z'
 labels:
   - docs
 milestone: m-1
@@ -43,3 +45,13 @@ type: docs
 - [ ] #4 The ERROR_HANDLING_DESIGN.md decision is implemented and recorded
 - [ ] #5 bash scripts/ci-local.sh HEAD prints RESULT: PASS
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. README: fix the stale 0.3 bits (no-context cause example, 'no-context form is a function', native cause JSON with code), add an Immutability section, an Upgrading-from-0.3 pointer, requirements (Bun >=1.3.14 / Node >=22, TS 5.9-7.x), and the new exports (ERR_PROTOCOL, NoContextErr, RESERVED_KINDS) in the API table.
+2. docs/migration-0.4.md: one section per Breaking changes entry with before/after code, plus 'consumers with shared kind names' audit steps, bundled copies and cause preservation; add docs/ to package files? (no: link to GitHub; keep tarball lean).
+3. scripts/gen-llms.ts + bun run docs:llms: LLMS.txt = fixed agent header + README with the logo/HTML and the Philosophy section removed; deterministic. Test: tests/llms.test.ts checks LLMS.txt equals the generator output (fails when stale, runs in every bun test leg). CI: ci.yml check job runs docs:llms then git diff --exit-code LLMS.txt; mirrored in ci-local.sh.
+4. ERROR_HANDLING_DESIGN.md (1,784 lines of pre-0.1 design, describes removed APIs): archive to backlog/docs via the backlog doc CLI as a historical doc with a header, replace the root file with nothing and point from README/CONTRIBUTING if referenced. Decision recorded in notes.
+5. Gate, commit, ci-local.
+<!-- SECTION:PLAN:END -->

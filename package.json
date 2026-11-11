@@ -47,6 +47,7 @@
     "bench": "bun bench/errorset.bench.ts",
     "build": "bun build ./src/index.ts --outdir ./dist --target node && bun run build:types",
     "build:types": "tsc -p tsconfig.build.json",
+    "docs:llms": "bun scripts/gen-llms.ts",
     "lint": "bunx ultracite check",
     "lint:fix": "bunx ultracite fix",
     "prepare": "lefthook install",
