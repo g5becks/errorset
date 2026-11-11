@@ -4,7 +4,8 @@
  * Each case asserts the behavior the fix must deliver, so today it fails and is marked
  * `test.failing`. Convention: the task that fixes a case changes it to `test` in the
  * same commit. Names are `<auditId> [<fixing task>] <expected behavior>`. At the v0.4.0
- * release only the cases scheduled for v0.5.0 (A5, A9) may still be `test.failing`.
+ * release only the cases scheduled for v0.5.0 (A5, A9) were still `test.failing`; since
+ * v0.5.0 (TASK-065, TASK-067) every case is a plain `test`.
  */
 
 import { afterEach, describe, expect, test } from "bun:test"
