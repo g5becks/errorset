@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-11
+
 ### Breaking changes
 
 - **Merged guards are typed per set, and `kinds` lists each name once (audit A9, TASK-067).** A merged guard used to type `data` as `Record<string, unknown>`; it now narrows to the union of the merged sets' error types, discriminated by `set`, so reading a `data` key that not every merged set has no longer compiles until you narrow (`if (err.set === "DbError") err.data.query`). `merged.kinds` no longer repeats a kind name that several sets share (membership was already per `(set, kind)` pair since 0.4.0, and is unchanged).
@@ -125,7 +127,8 @@ Initial release.
 - `recover`, `inspect`, `merge`, `capture` and `captureAsync` helpers, plus iteration over a set's kinds.
 - Error chaining with `cause`, custom debugger output, optional stack capture and global `configure()`.
 
-[Unreleased]: https://github.com/g5becks/errorset/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/g5becks/errorset/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/g5becks/errorset/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/g5becks/errorset/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/g5becks/errorset/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/g5becks/errorset/compare/v0.2.1...v0.3.0
