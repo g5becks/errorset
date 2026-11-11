@@ -23,6 +23,23 @@ import type {
   NoContextErr,
 } from "./types.ts"
 
+/** Initial value of the per-kind call-site caches: equal to nothing a caller passes. @internal */
+const NOT_SEEN = Object.freeze({})
+
+/**
+ * Whether a kind function was called as a tagged template: a TemplateStringsArray is a
+ * frozen array with a `raw` array. Requiring it to be frozen keeps a kind guard called
+ * with an ordinary array that happens to have `raw` a guard (it returns false); a
+ * deliberately frozen look-alike is indistinguishable and is treated as a template.
+ *
+ * @internal
+ */
+const isTemplateStrings = (value: unknown): value is TemplateStringsArray =>
+  Array.isArray(value) &&
+  Object.isFrozen(value) &&
+  "raw" in value &&
+  Array.isArray((value as TemplateStringsArray).raw)
+
 /**
  * Creates a kind function for a specific error kind.
  * The returned function serves dual purposes:
@@ -183,23 +200,27 @@ export function createKindFunction<
     return creator
   }
 
-  // Single-entry cache of the last template creator: the template strings object is
-  // unique per call site, so the same strings with the same holes is an exact hit
-  let lastStrings: TemplateStringsArray | undefined
+  // Single-entry caches: the template strings object is unique per call site, so the
+  // same strings object is the same call site. The last template creator (reused when
+  // the holes are the same too) and the last no-context message. Both start as a
+  // private sentinel, so no caller value can match them before a real template does.
+  let lastStrings: unknown = NOT_SEEN
   let lastKeys: readonly string[] = []
   let lastCreator: unknown
+  let lastNoContextStrings: unknown = NOT_SEEN
+  let lastNoContextMessage = ""
 
   // The dual-purpose function
   const kindFn = <K extends keyof T & string>(
     stringsOrValue: TemplateStringsArray | object | null | undefined,
     ...keys: K[]
   ): ErrorCreator<Kind, T, K, N> | NoContextErr<Kind, N> | boolean => {
-    // Check if called as tagged template literal
-    // TemplateStringsArray is an array with a 'raw' property
+    // Called as a tagged template? A call site seen last time already passed the full
+    // check (isTemplateStrings is comparatively slow: Object.isFrozen on an array)
     if (
-      Array.isArray(stringsOrValue) &&
-      "raw" in stringsOrValue &&
-      Array.isArray((stringsOrValue as TemplateStringsArray).raw)
+      stringsOrValue === lastStrings ||
+      stringsOrValue === lastNoContextStrings ||
+      isTemplateStrings(stringsOrValue)
     ) {
       const strings = stringsOrValue as TemplateStringsArray
 
@@ -208,7 +229,11 @@ export function createKindFunction<
       // and, with options: BackupError.config_invalid`S3 config required`.with({ cause })
       // (A kind with declared keys always takes the entity, unless it declares none.)
       if (keys.length === 0 && !declaredKeys?.length) {
-        return createNoContext(strings.join(""), undefined, kindFn)
+        if (strings !== lastNoContextStrings) {
+          lastNoContextStrings = strings
+          lastNoContextMessage = strings.join("")
+        }
+        return createNoContext(lastNoContextMessage, undefined, kindFn)
       }
       if (strings !== lastStrings || !sameKeys(lastKeys, keys)) {
         lastStrings = strings

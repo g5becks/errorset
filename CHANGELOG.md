@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A kind guard called with an array that has a `raw` property returned an error object (TASK-074).** `UserError.a(value)` detects tagged-template calls by shape, so an ordinary array with a `raw` array was treated as a template and returned a (truthy) error instead of `false`. Template strings must now also be frozen, as every real `TemplateStringsArray` is; the check runs only for call sites not seen before, so creation speed is unchanged (no-context creation got faster, 34 → 25 ns, from caching each call site's joined message). A deliberately frozen look-alike is still treated as a template.
 - **`init<T>()` accepts `interface` entity types (audit A13, TASK-066).** The entity constraint was `T extends Record<string, unknown>`, which interfaces don't satisfy (no implicit index signature), so `init<Account>()` failed with TS2344. Entity types and `Err`'s `Data` parameter are now constrained to `object`; template keys are still `keyof T & string`, bad keys still fail to compile, and type aliases behave as before.
 
 ## [0.4.0] - 2026-11-11
