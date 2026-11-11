@@ -3,7 +3,7 @@
  * @module types
  */
 
-import { type Config, getConfig } from "./config.ts"
+import { type Config, getConfig, getConfigVersion } from "./config.ts"
 
 /**
  * Symbol used to brand error objects.
@@ -452,16 +452,96 @@ function errToJSON(this: SerializableErr): ErrJSON {
 }
 
 /**
- * Property descriptors for non-enumerable `toJSON` and `toString`, built once per
- * kind and applied with `Object.defineProperties`, so `Object.keys` and deep
- * equality of errors are unchanged.
+ * Shared prototype of every error. `toJSON`, `toString` and the Node.js inspect hook
+ * live here (non-enumerable), not on each error, so creating an error allocates no
+ * closures; `Object.keys`, spreading, deep equality and JSON output are unchanged.
+ * The inspect hook is a getter that returns a function bound to the error, so it also
+ * works when read off the error and called detached.
+ *
+ * @internal
  */
-const serializationDescriptors = (
-  formatError: () => string
-): PropertyDescriptorMap => ({
+const ERR_PROTO: object = Object.create(Object.prototype, {
   toJSON: { value: errToJSON },
-  toString: { value: formatError },
+  toString: {
+    value(this: { set: string; kind: string; message: string }): string {
+      return `${this.set}.${this.kind}: ${this.message}`
+    },
+  },
+  [INSPECT]: {
+    get(this: { set: string; kind: string; data: unknown }): () => string {
+      const { set, kind, data } = this
+      return () => `${set}.${kind} ${JSON.stringify(data)}`
+    },
+  },
 })
+
+/**
+ * Creates an error object on `proto` with the fields in the canonical order: the brand
+ * (own, enumerable symbol), `set`, `kind`, `message`, `data`, then `cause` if given.
+ *
+ * @internal
+ */
+const newErr = (
+  proto: object,
+  set: string,
+  kind: string,
+  message: string,
+  data: object,
+  cause: unknown
+): Record<string | symbol, unknown> => {
+  const err = Object.create(proto) as Record<string | symbol, unknown>
+  err[ERR] = ERR_PROTOCOL
+  err.set = set
+  err.kind = kind
+  err.message = message
+  err.data = data
+  if (cause !== undefined) {
+    err.cause = cause
+  }
+  return err
+}
+
+/**
+ * Constructor for template errors: same prototype and field order as `newErr`, but
+ * `new` with a fixed shape is faster than `Object.create` plus property adds.
+ * `constructor` on the prototype is reset to `Object`, as for a plain object.
+ *
+ * @internal
+ */
+class TemplateErr {
+  declare [ERR]: ErrProtocol
+  set: string
+  kind: string
+  message: string
+  data: object
+  constructor(set: string, kind: string, message: string, data: object) {
+    this[ERR] = ERR_PROTOCOL
+    this.set = set
+    this.kind = kind
+    this.message = message
+    this.data = data
+  }
+}
+Object.defineProperties(
+  TemplateErr.prototype,
+  Object.getOwnPropertyDescriptors(ERR_PROTO)
+)
+Object.defineProperty(TemplateErr.prototype, "constructor", { value: Object })
+
+/**
+ * Same template holes, in the same order. Only called for the same template strings
+ * object, which fixes the number of holes, so the lengths are always equal.
+ *
+ * @internal
+ */
+const sameKeys = (a: readonly string[], b: readonly string[]): boolean => {
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] !== b[i]) {
+      return false
+    }
+  }
+  return true
+}
 
 /** The `data` of every no-context error: one shared, frozen empty object. @internal */
 const EMPTY_DATA = Object.freeze({}) as Record<string, never>
@@ -498,10 +578,6 @@ function captureStack(
   constructorOpt: unknown,
   config: Readonly<Config>
 ): void {
-  if (!config.includeStack) {
-    return
-  }
-
   // Check if Error.captureStackTrace is available (V8 engines: Node.js, Chrome, Bun)
   if (typeof Error.captureStackTrace === "function") {
     // Save and set stack trace limit
@@ -519,34 +595,50 @@ function captureStack(
 }
 
 /**
- * Applies the creation-time options of the effective config (global merged with
- * the set's own) to a new error: `timestamp` when `includeTimestamp` is on, and a
- * stack trace when `includeStack` is on. When `includeTimestamp` is off the
- * `timestamp` property is absent, not `undefined`.
+ * Returns the effective configuration of a set (global merged with the set's own),
+ * cached until the global configuration changes (`configure()`, its disposer or
+ * `resetConfig()` bump the configuration version).
+ *
+ * @internal
+ */
+const cachedConfig = (
+  instanceConfig: Partial<Config> | undefined
+): (() => Readonly<Config>) => {
+  let version = -1
+  let config = getConfig()
+  return () => {
+    const current = getConfigVersion()
+    if (current !== version) {
+      version = current
+      config = instanceConfig
+        ? { ...getConfig(), ...instanceConfig }
+        : getConfig()
+    }
+    return config
+  }
+}
+
+/**
+ * Applies the creation-time options of the effective config to a new error:
+ * `timestamp` when `includeTimestamp` is on, and a stack trace when `includeStack` is
+ * on. When `includeTimestamp` is off the `timestamp` property is absent, not
+ * `undefined`. Both checks are plain property reads, so nothing is allocated when the
+ * options are off.
  *
  * @internal
  */
 function applyCreationConfig(
-  target: object,
+  target: Record<string, unknown>,
   constructorOpt: unknown,
-  instanceConfig?: Partial<Config>
+  config: Readonly<Config>
 ): void {
-  const globalConfig = getConfig()
-  const config = instanceConfig
-    ? { ...globalConfig, ...instanceConfig }
-    : globalConfig
-
   if (config.includeTimestamp) {
     // Errors are frozen right after creation, so this becomes read-only too
-    Object.defineProperty(target, "timestamp", {
-      value: Date.now(),
-      writable: true,
-      enumerable: true,
-      configurable: true,
-    })
+    target.timestamp = Date.now()
   }
-
-  captureStack(target, constructorOpt, config)
+  if (config.includeStack) {
+    captureStack(target, constructorOpt, config)
+  }
 }
 
 /** Longest rendering of an object in a message before it is cut off with "…". @internal */
@@ -614,8 +706,6 @@ const interpolateObject = (value: object): string => {
  */
 const interpolate = (value: unknown): string => {
   switch (typeof value) {
-    case "string":
-      return value
     case "bigint":
       return `${value}n`
     case "function":
@@ -623,7 +713,7 @@ const interpolate = (value: unknown): string => {
     case "object":
       return value === null ? "null" : interpolateObject(value)
     default:
-      // undefined, number, boolean, symbol
+      // string, undefined, number, boolean, symbol
       return String(value)
   }
 }
@@ -663,33 +753,26 @@ export function createKindFunction<
   instanceConfig?: Partial<Config>,
   declaredKeys?: readonly string[]
 ): KindFunction<Kind, T, N> {
-  // One `toString` per kind, shared by every error of this kind: "<Set>.<kind>: <message>"
-  const errToString = function (this: { message: string }): string {
-    return `${name}.${kind}: ${this.message}`
-  }
-  const serialization = serializationDescriptors(errToString)
+  // Effective config, recomputed only when the global configuration changes
+  const effectiveConfig = cachedConfig(instanceConfig)
 
-  // No-context errors (templates without holes) are plain objects; with() returns a
-  // new error with the same message plus options, so errors never need mutating.
+  // No-context errors (templates without holes) are plain error objects on a per-kind
+  // prototype that adds with(): it returns a new error with the same message plus
+  // options, so errors never need mutating.
   const createNoContext = (
     message: string,
     options: ErrorOptions | undefined,
     constructorOpt: unknown
   ): NoContextErr<Kind, N> => {
-    const data = EMPTY_DATA
-    const err = {
-      [ERR]: ERR_PROTOCOL,
-      set: name,
+    const err = newErr(
+      noContextProto,
+      name,
       kind,
       message,
-      data,
-      ...(options?.cause !== undefined && { cause: options.cause }),
-      [INSPECT]() {
-        return `${name}.${kind} ${JSON.stringify(data)}`
-      },
-    }
-    Object.defineProperties(err, noContextDescriptors)
-    applyCreationConfig(err, constructorOpt, instanceConfig)
+      EMPTY_DATA,
+      options?.cause
+    )
+    applyCreationConfig(err, constructorOpt, effectiveConfig())
     // Errors are immutable, matching their readonly types (EMPTY_DATA is frozen once)
     return Object.freeze(err) as unknown as NoContextErr<Kind, N>
   }
@@ -699,12 +782,11 @@ export function createKindFunction<
   ): NoContextErr<Kind, N> {
     return createNoContext(this.message, options, withOptions)
   }
-  const noContextDescriptors: PropertyDescriptorMap = {
-    ...serialization,
+  const noContextProto: object = Object.create(ERR_PROTO, {
     with: { value: withOptions },
-  }
+  })
 
-  // Rehydration (XError.from): same shape and descriptors as a created error, with the
+  // Rehydration (XError.from): same shape and prototype as a created error, with the
   // serialized timestamp kept and no stack. Empty data means the no-context shape.
   const rehydrate = ({
     message,
@@ -725,25 +807,82 @@ export function createKindFunction<
         )
       : data
     const noContext = Object.keys(source).length === 0
-    const ownData = noContext ? EMPTY_DATA : Object.freeze({ ...source })
-    const err = {
-      [ERR]: ERR_PROTOCOL,
-      set: name,
+    const err = newErr(
+      noContext ? noContextProto : ERR_PROTO,
+      name,
       kind,
       message,
-      data: ownData,
-      ...(cause !== undefined && { cause }),
-      ...(timestamp !== undefined && { timestamp }),
-      [INSPECT]() {
-        return `${name}.${kind} ${JSON.stringify(ownData)}`
-      },
-    }
-    Object.defineProperties(
-      err,
-      noContext ? noContextDescriptors : serialization
+      noContext ? EMPTY_DATA : Object.freeze({ ...source }),
+      cause
     )
+    if (timestamp !== undefined) {
+      err.timestamp = timestamp
+    }
     return Object.freeze(err)
   }
+
+  /**
+   * Builds the creator for one template: everything that depends only on the call site
+   * (data keys, hole count, a plain copy of the strings) is computed once here.
+   */
+  const makeCreator = <K extends keyof T & string>(
+    strings: TemplateStringsArray,
+    keys: readonly K[]
+  ): ErrorCreator<Kind, T, K, N> => {
+    // Data keys: the declared ones (object form) or the template's holes
+    const dataKeys = (declaredKeys ?? keys) as readonly K[]
+    const dataKeyCount = dataKeys.length
+    const holeCount = keys.length
+    // A plain copy of the template strings: much cheaper to index than the frozen
+    // TemplateStringsArray (measured ~10 ns per error on Bun 1.4)
+    const parts = Array.from(strings)
+    const first = parts[0] ?? ""
+
+    const creator = (
+      entity: Pick<T, K>,
+      options?: ErrorOptions
+    ): Err<Kind, Pick<T, K>, N> => {
+      // Extract only the data keys into data
+      const data = {} as Record<string, unknown>
+      for (let i = 0; i < dataKeyCount; i += 1) {
+        const key = dataKeys[i] as K
+        data[key] = entity[key]
+      }
+
+      // Build the message; strings (the common case) skip interpolate()
+      let message = first
+      for (let i = 0; i < holeCount; i += 1) {
+        const value: unknown = entity[keys[i] as K]
+        message += typeof value === "string" ? value : interpolate(value)
+        message += parts[i + 1] ?? ""
+      }
+
+      const err = new TemplateErr(
+        name,
+        kind,
+        message,
+        data
+      ) as unknown as Record<string | symbol, unknown>
+      if (options?.cause !== undefined) {
+        err.cause = options.cause
+      }
+      const config = effectiveConfig()
+      if (config.includeTimestamp || config.includeStack) {
+        applyCreationConfig(err, creator, config)
+      }
+
+      // Errors are immutable, matching their readonly types (data is a shallow freeze)
+      Object.freeze(data)
+      return Object.freeze(err) as unknown as Err<Kind, Pick<T, K>, N>
+    }
+    return creator
+  }
+
+  // Single-entry cache of the last template creator: the template strings object is
+  // unique per call site, so the same strings with the same holes is an exact hit
+  let lastStrings: TemplateStringsArray | undefined
+  let lastKeys: readonly string[] = []
+  let lastCreator: unknown
 
   // The dual-purpose function
   const kindFn = <K extends keyof T & string>(
@@ -766,55 +905,12 @@ export function createKindFunction<
       if (keys.length === 0 && !declaredKeys?.length) {
         return createNoContext(strings.join(""), undefined, kindFn)
       }
-      // Data keys: the declared ones (object form) or the template's holes
-      const dataKeys = (declaredKeys ?? keys) as readonly K[]
-
-      // Return error creator function for template with keys
-      const creator = (
-        entity: Pick<T, K>,
-        options?: ErrorOptions
-      ): Err<Kind, Pick<T, K>, N> => {
-        // Extract only the data keys into data
-        const data = {} as Record<string, unknown>
-        for (const key of dataKeys) {
-          data[key] = entity[key]
-        }
-
-        // Build message by interpolating values
-        let message = strings[0] ?? ""
-        for (let i = 0; i < keys.length; i += 1) {
-          const key = keys[i]
-          const value = key === undefined ? undefined : entity[key]
-          message += interpolate(value)
-          message += strings[i + 1] ?? ""
-        }
-
-        // Create error object with custom inspect for debuggers
-        const err = {
-          [ERR]: ERR_PROTOCOL,
-          set: name,
-          kind,
-          message,
-          data: data as Pick<T, K>,
-          ...(options?.cause !== undefined && { cause: options.cause }),
-          // Custom inspection for Node.js debuggers
-          // Format: ErrorSetName.kind { data }
-          [INSPECT]() {
-            return `${name}.${kind} ${JSON.stringify(data)}`
-          },
-        } as Err<Kind, Pick<T, K>, N>
-
-        Object.defineProperties(err, serialization)
-
-        // Capture stack trace if enabled (V8 engines only)
-        applyCreationConfig(err, creator, instanceConfig)
-
-        // Errors are immutable, matching their readonly types (data is a shallow freeze)
-        Object.freeze(data)
-        return Object.freeze(err)
+      if (strings !== lastStrings || !sameKeys(lastKeys, keys)) {
+        lastStrings = strings
+        lastKeys = keys
+        lastCreator = makeCreator(strings, keys)
       }
-
-      return creator
+      return lastCreator as ErrorCreator<Kind, T, K, N>
     }
 
     // Called as guard - check if value is this specific error kind

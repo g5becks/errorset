@@ -32,6 +32,12 @@ const CONFIG_KEYS = Object.keys(defaultConfig) as (keyof Config)[]
 /** Global configuration state */
 let currentConfig: Config = { ...defaultConfig }
 
+/**
+ * Bumped on every configuration change (configure, its disposer, resetConfig), so error
+ * sets can cache their effective configuration and recompute it only when it changed.
+ */
+let configVersion = 0
+
 /** Copies only the known options, so stray keys (e.g. the removed format/colors) are ignored. */
 const pickKnownOptions = (options: Partial<Config>): Partial<Config> => {
   const known: Partial<Config> = {}
@@ -73,8 +79,10 @@ const pickKnownOptions = (options: Partial<Config>): Partial<Config> => {
 export function configure(options: Partial<Config>): () => void {
   const previous = currentConfig
   currentConfig = { ...currentConfig, ...pickKnownOptions(options) }
+  configVersion += 1
   return () => {
     currentConfig = previous
+    configVersion += 1
   }
 }
 
@@ -94,4 +102,15 @@ export function getConfig(): Readonly<Config> {
  */
 export function resetConfig(): void {
   currentConfig = { ...defaultConfig }
+  configVersion += 1
+}
+
+/**
+ * The configuration version: changes whenever the global configuration changes.
+ * Used internally to invalidate per-set cached configuration.
+ *
+ * @internal
+ */
+export function getConfigVersion(): number {
+  return configVersion
 }

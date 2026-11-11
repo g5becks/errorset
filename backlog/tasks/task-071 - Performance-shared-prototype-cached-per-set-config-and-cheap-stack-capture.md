@@ -1,10 +1,11 @@
 ---
 id: TASK-071
 title: 'Performance: shared prototype, cached per-set config and cheap stack capture'
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@claude'
 created_date: '2026-11-10T17:35:00Z'
-updated_date: '2026-11-11T02:22:00Z'
+updated_date: '2026-11-11T03:37:00Z'
 labels:
   - performance
 milestone: m-2
@@ -36,6 +37,15 @@ Each error allocates a fresh `[INSPECT]` closure, and `captureStack` spreads `{.
 - [ ] #3 configure() invalidates cached config (test)
 - [ ] #4 bash scripts/ci-local.sh HEAD prints RESULT: PASS
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Measure first: standalone variant micro-benchmarks (shared prototype vs literal vs class, inspect closure, freezes, cached creator) to find what can reach the budget; min-of-N runs because the host is under external load.
+2. Implement: shared prototype for toJSON/toString (per-kind proto for no-context with()), keep the own [INSPECT] closure if detached calls must keep working, no cause/timestamp spreads, per-set effective config cached by a config version counter bumped by configure()/disposer/resetConfig, captureStack short-circuit before any spread, cached creator per template call site if it measures well.
+3. Tests: behavior unchanged (serialization, inspect, toString, equality, key order), configure() invalidates the cache (incl. disposer and resetConfig).
+4. Benchmark vs bench/baseline-0.3.0.json and the pre-071 number (176.8 ns); if 60 ns / 1.9x is not reachable, record best result and profile and mark blocked per the run rules.
+<!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
 

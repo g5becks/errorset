@@ -146,13 +146,26 @@ describe("enumerability", () => {
       "data",
       "cause",
     ])
+    // toJSON and toString live on a shared prototype since 0.5.0 (TASK-071): still
+    // callable, never enumerable, and invisible to keys, for...in and spreading
     for (const err of [template, callable, called]) {
-      expect(Object.getOwnPropertyDescriptor(err, "toJSON")?.enumerable).toBe(
-        false
-      )
-      expect(Object.getOwnPropertyDescriptor(err, "toString")?.enumerable).toBe(
-        false
-      )
+      for (const method of ["toJSON", "toString"]) {
+        expect(typeof (err as Record<string, unknown>)[method]).toBe("function")
+        expect(Object.prototype.propertyIsEnumerable.call(err, method)).toBe(
+          false
+        )
+      }
+      // Still looks like a plain object to code that checks the constructor
+      expect((err as { constructor: unknown }).constructor).toBe(Object)
+      // Nothing on the prototype chain is enumerable, so for...in sees only own keys
+      for (
+        let proto = Object.getPrototypeOf(err);
+        proto !== null;
+        proto = Object.getPrototypeOf(proto)
+      ) {
+        expect(Object.keys(proto)).toEqual([])
+      }
+      expect(Object.keys({ ...err })).toEqual(Object.keys(err))
     }
   })
 })
