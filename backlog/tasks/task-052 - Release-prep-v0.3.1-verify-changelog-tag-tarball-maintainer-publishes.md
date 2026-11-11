@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-11-10T17:35:00Z'
-updated_date: '2026-11-10T19:49:00Z'
+updated_date: '2026-11-11T02:22:00Z'
 labels:
   - release
 milestone: m-0
@@ -73,4 +73,6 @@ Release prep for v0.3.1 (non-breaking).
   npm view @takinprofit/errorset@0.3.1 version
   gh release create v0.3.1 --verify-tag --title v0.3.1 --notes-file /Users/takinprofit/Dev/errorset-release/v0.3.1/RELEASE_NOTES.md
 - npm publish pending maintainer (interactive 2FA).
+
+- Published by the maintainer (recorded 2026-11-10): npm dist-tag latest = 0.3.1; npm view dist.integrity sha512-xOq2zaJc3/mx0lUBKutvdu4//yCSuyG+tcaP4FKtzjx5h4uVXDyBUnnr1vSenwdNdayLAyxnHF4WDlKMCdvM9Q== matches the release tarball's SHA-512 (c4eab6cd…dbccf5, hex→base64 compared); maintainer also confirmed the match. GitHub release v0.3.1 exists: https://github.com/g5becks/errorset/releases/tag/v0.3.1 (published 2026-11-11T02:13:44Z).
 <!-- SECTION:NOTES:END -->

@@ -5,9 +5,8 @@ status: In Progress
 assignee:
   - '@claude'
 created_date: '2026-11-10T17:35:00Z'
-updated_date: '2026-11-10T21:16:00Z'
-labels:
-  - blocked
+updated_date: '2026-11-11T02:22:00Z'
+labels: []
 milestone: m-1
 dependencies:
   - TASK-055
@@ -34,7 +33,7 @@ type: bug
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [x] #1 Errors and their data are frozen; writes throw (tests); A8 regression case passes
-- [ ] #2 Creation overhead from freezing is < 10% vs the recorded baseline (numbers in notes)
+- [x] #2 Freezing adds at most 2 freezes per error, ≤ 20 ns per error on the reference machine, measured with and without freezing on the same commit (5 runs each).
 - [x] #3 CHANGELOG.md lists the change under ## [Unreleased] > ### Breaking changes with migration steps
 - [ ] #4 bash scripts/ci-local.sh HEAD prints RESULT: PASS
 <!-- AC:END -->
@@ -61,4 +60,8 @@ type: bug
 - Per the run rules, v0.4.0 is not released while this task is blocked.
 
 - ci-local: the freeze commit is covered by Verified with scripts/ci-local.sh (5e4d353, PASS); AC #4 is not checked while the task is blocked (it must be re-run after the maintainer's decision lands).
+
+- Budget relaxed by maintainer decision 2026-11-10; original 10% assumed freezing costs a few ns, measured ~6–9 ns per freeze.
+- Maintainer chose option (a): keep freezing both the error and its data and accept the measured cost. AC #2 rewritten to the maintainer's wording and checked with the existing measurements: template errors 2 freezes, +14.5 ns; no-context errors 1 freeze (shared frozen EMPTY_DATA), +7.3 ns; both ≤ 20 ns (Bun 1.4.4, Apple M5, interleaved A/B on the same code, 5 runs each). Label 'blocked' removed.
+- CHANGELOG: added an [Unreleased] > ### Changed entry (frozen errors and data, strict-mode TypeError, measured cost); the breaking entry now points to it instead of 'pending a maintainer decision'.
 <!-- SECTION:NOTES:END -->

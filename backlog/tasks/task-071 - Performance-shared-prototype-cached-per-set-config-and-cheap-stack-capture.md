@@ -4,6 +4,7 @@ title: 'Performance: shared prototype, cached per-set config and cheap stack cap
 status: To Do
 assignee: []
 created_date: '2026-11-10T17:35:00Z'
+updated_date: '2026-11-11T02:22:00Z'
 labels:
   - performance
 milestone: m-2
@@ -35,3 +36,9 @@ Each error allocates a fresh `[INSPECT]` closure, and `captureStack` spreads `{.
 - [ ] #3 configure() invalidates cached config (test)
 - [ ] #4 bash scripts/ci-local.sh HEAD prints RESULT: PASS
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+- Track overall template-error creation against the 0.3.0 baseline: 107.4 ns → 176.8 ns at TASK-061. Report the after-071 number vs both 0.3.0 and the pre-071 number.
+<!-- SECTION:NOTES:END -->
