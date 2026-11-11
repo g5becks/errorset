@@ -9,6 +9,14 @@
  * @module errorset
  */
 
+// Core API, one block per module
+export {
+  ERR,
+  ERR_PROTOCOL,
+  type Err,
+  type ErrProtocol,
+  isErr,
+} from "./brand.ts"
 // Configuration
 export {
   type Config,
@@ -16,48 +24,50 @@ export {
   getConfig,
   resetConfig,
 } from "./config.ts"
-// Core types and constants
+export type {
+  SetGuard,
+  SetGuardWithKinds,
+} from "./guards.ts"
 export {
   captureAsync,
   captureSync,
-  type DeclaredKeys,
-  ERR,
-  ERR_PROTOCOL,
-  type Err,
-  type ErrorCreator,
   type ErrorMapper,
-  type ErrorOptions,
-  type ErrorSet,
-  type ErrorSetBuilder,
-  type ErrorSetConfig,
-  type ErrProtocol,
-  errorSet,
-  type GuardedError,
-  type HasDuplicates,
   type InspectHandler,
   type InspectHandlers,
   inspect,
-  isErr,
-  type KindConstructor,
-  type KindData,
-  type KindFunction,
-  type KindGuard,
-  type KindKeys,
+  type RecoverHandler,
+  type RecoverHandlers,
+  recover,
+  toError,
+} from "./helpers.ts"
+export {
+  type GuardedError,
   type MergedGuard,
   type MergedInspectHandlers,
   type MergedRecoverHandlers,
   type MergeInput,
   merge,
+} from "./merge.ts"
+export {
+  type ErrorSet,
+  type ErrorSetBuilder,
+  errorSet,
+} from "./set.ts"
+export {
+  type DeclaredKeys,
+  type ErrorCreator,
+  type ErrorOptions,
+  type ErrorSetConfig,
+  type HasDuplicates,
+  type KindConstructor,
+  type KindData,
+  type KindFunction,
+  type KindGuard,
+  type KindKeys,
   type NoContextErr,
   type NoDuplicates,
   type NoReserved,
   type NoReservedKeys,
   RESERVED_KINDS,
-  type RecoverHandler,
-  type RecoverHandlers,
   type ReservedKind,
-  recover,
-  type SetGuard,
-  type SetGuardWithKinds,
-  toError,
 } from "./types.ts"

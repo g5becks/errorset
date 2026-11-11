@@ -5,9 +5,9 @@
  */
 
 import { afterEach, describe, expect, it, spyOn } from "bun:test"
-import { errorSet, merge } from "../src/index.ts"
 // Internal helper: not part of the public entry since 0.4.0
-import { createSetGuardWithKinds } from "../src/types.ts"
+import { createSetGuardWithKinds } from "../src/guards.ts"
+import { errorSet, merge } from "../src/index.ts"
 
 type Ctx = { symbol: string }
 

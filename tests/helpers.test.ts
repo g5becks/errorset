@@ -4,9 +4,9 @@
  */
 
 import { describe, expect, it, mock } from "bun:test"
-import { type Err, errorSet, merge } from "../src/index.ts"
 // Internal helper: not part of the public entry since 0.4.0
-import { createSetGuardWithKinds } from "../src/types.ts"
+import { createSetGuardWithKinds } from "../src/guards.ts"
+import { type Err, errorSet, merge } from "../src/index.ts"
 
 // Pre-define regex at module level
 const noHandlerRegex = /no handler for "UserError\.suspended"/u

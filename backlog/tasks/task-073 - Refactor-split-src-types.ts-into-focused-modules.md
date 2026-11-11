@@ -1,9 +1,11 @@
 ---
 id: TASK-073
 title: 'Refactor: split src/types.ts into focused modules'
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@claude'
 created_date: '2026-11-10T17:35:00Z'
+updated_date: '2026-11-11T03:50:00Z'
 labels:
   - refactor
 milestone: m-2
@@ -38,3 +40,11 @@ Split into `brand.ts`, `kind.ts`, `set.ts`, `helpers.ts` (recover/inspect/merge/
 - [ ] #2 Public declaration surface unchanged (diff recorded); tests, coverage and benchmarks unchanged within noise
 - [ ] #3 bash scripts/ci-local.sh HEAD prints RESULT: PASS
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Baseline: API report of every src/index.ts export with its emitted declaration text (typescript@5.9.3 API in the scratchpad), test results, coverage, benchmarks.
+2. Split src/types.ts mechanically with a TS-API splitter: statements move verbatim with leading comments into brand, types, serialization, kind, guards, helpers, merge, set (each <= ~400 lines, acyclic); imports computed; internal names used across modules exported (index.ts re-exports only the public names). Update the two tests that import createSetGuardWithKinds from src/types.ts.
+3. Verify: API report identical, tests/coverage identical, benchmarks within noise, build/consumer smoke, ci-local.
+<!-- SECTION:PLAN:END -->
