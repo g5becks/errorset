@@ -142,3 +142,34 @@ describe("duplicate set names", () => {
     expect(Second(First.x`From the first definition`)).toBe(true)
   })
 })
+
+describe("large sets (TASK-072)", () => {
+  const kinds = Array.from({ length: 40 }, (_, i) => `kind_${i}`)
+  const Big = errorSet("SetIdentity.Big", kinds as ["kind_0"]).init<Ctx>()
+  const Twin = errorSet("SetIdentity.BigTwin", kinds as ["kind_0"]).init<Ctx>()
+  type Tag = (strings: TemplateStringsArray) => unknown
+  const kindFns = Big as unknown as Record<string, Tag>
+  const twinFns = Twin as unknown as Record<string, Tag>
+
+  it("accepts every kind of a 40-kind set and rejects the same kinds of another set", () => {
+    for (const kind of kinds) {
+      const own = (kindFns[kind] as Tag)`x`
+      const twin = (twinFns[kind] as Tag)`x`
+      expect(Big(own)).toBe(true)
+      expect(Big(twin)).toBe(false)
+      expect(Twin(twin)).toBe(true)
+    }
+  })
+
+  it("rejects kinds that are not in the set, including inherited names", () => {
+    for (const kind of [
+      "kind_40",
+      "toString",
+      "constructor",
+      "__proto__",
+      "",
+    ]) {
+      expect(Big({ ...Big.kind_0`x`, kind })).toBe(false)
+    }
+  })
+})

@@ -1018,13 +1018,6 @@ type Member = { readonly set: string | undefined; readonly kind: string }
 const membershipTest = (
   members: readonly Member[]
 ): ((set: unknown, kind: string) => boolean) => {
-  const names = new Set(members.map(member => member.set))
-  const [onlyName] = names
-  if (names.size === 1 && onlyName !== undefined) {
-    // Fast path for a single named set (every errorSet guard)
-    const kinds = members.map(member => member.kind)
-    return (set, kind) => set === onlyName && kinds.includes(kind)
-  }
   const bySet = new Map<string | undefined, Set<string>>()
   for (const { set, kind } of members) {
     const kinds = bySet.get(set) ?? new Set<string>()
@@ -1037,6 +1030,53 @@ const membershipTest = (
     (anySet?.has(kind) ?? false)
 }
 
+/**
+ * Guard for the pairs of one named set (every errorSet guard): brand, set and kind
+ * checks inlined, kinds in a Set so membership is constant-time. Undefined when the
+ * members span several sets (or any set).
+ *
+ * @internal
+ */
+const singleSetGuard = <
+  Kinds extends string,
+  T extends object,
+  N extends string,
+>(
+  members: readonly Member[]
+): ((value: unknown) => value is Err<Kinds, Partial<T>, N>) | undefined => {
+  const name = members[0]?.set
+  if (name === undefined || members.some(member => member.set !== name)) {
+    return
+  }
+  // Array#includes grew to ~43 ns at 40 kinds (audit P2); Set#has stays ~5 ns
+  const kinds = new Set(members.map(member => member.kind))
+  return (value: unknown): value is Err<Kinds, Partial<T>, N> =>
+    typeof value === "object" &&
+    value !== null &&
+    (value as { [ERR]?: unknown })[ERR] === ERR_PROTOCOL &&
+    (value as { set?: unknown }).set === name &&
+    kinds.has((value as { kind?: unknown }).kind as string)
+}
+
+/** Guard for pairs from several sets (merged guards, legacy any-set members). @internal */
+const multiSetGuard = <
+  Kinds extends string,
+  T extends object,
+  N extends string,
+>(
+  members: readonly Member[]
+): ((value: unknown) => value is Err<Kinds, Partial<T>, N>) => {
+  const accepts = membershipTest(members)
+  return (value: unknown): value is Err<Kinds, Partial<T>, N> => {
+    // Must carry a brand this copy understands
+    if (!hasBrand(value)) {
+      return false
+    }
+    const { kind, set } = value as unknown as Record<string, unknown>
+    return typeof kind === "string" && accepts(set, kind)
+  }
+}
+
 /** Creates a guard over (set, kind) pairs, with instanceof support. @internal */
 const createMemberGuard = <
   Kinds extends string,
@@ -1045,15 +1085,7 @@ const createMemberGuard = <
 >(
   members: readonly Member[]
 ): SetGuard<Kinds, T, N> => {
-  const accepts = membershipTest(members)
-  const guard = (value: unknown): value is Err<Kinds, Partial<T>, N> => {
-    // Must carry a brand this copy understands
-    if (!hasBrand(value)) {
-      return false
-    }
-    const { kind, set } = value as unknown as Record<string, unknown>
-    return typeof kind === "string" && accepts(set, kind)
-  }
+  const guard = singleSetGuard<Kinds, T, N>(members) ?? multiSetGuard(members)
 
   Object.defineProperties(guard, {
     [Symbol.hasInstance]: { value: (value: unknown): boolean => guard(value) },
