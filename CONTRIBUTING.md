@@ -17,6 +17,15 @@ whenever GitHub Actions is unavailable; never record a GitHub run that did not h
 `LLMS.txt` is generated from `README.md` by `bun run docs:llms`; after editing the README,
 regenerate it and commit both (CI fails when it is stale).
 
+## Benchmarks
+
+`bun run bench` prints ns/op per case (`--runs 3` records per-case medians over separate
+processes, `--json out.json` writes the result). `bench/baseline-0.3.0.json` is the reference
+for performance budgets. `.github/workflows/benchmarks.yml` runs the same command on demand
+(`workflow_dispatch`, with a `runs` input) and weekly, and uploads the JSON as an artifact; it
+is not a CI gate, so it has no `scripts/ci-local.sh` mirror. Shared runners are noisy: compare
+artifacts with each other, not against fixed thresholds.
+
 ## Release procedure
 
 Releases are prepared by a script and published by the maintainer.
