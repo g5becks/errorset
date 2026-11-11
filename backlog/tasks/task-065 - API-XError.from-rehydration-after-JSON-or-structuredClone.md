@@ -1,9 +1,11 @@
 ---
 id: TASK-065
 title: 'API: XError.from() rehydration after JSON or structuredClone'
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@claude'
 created_date: '2026-11-10T17:35:00Z'
+updated_date: '2026-11-11T03:07:00Z'
 labels:
   - api
 milestone: m-2

@@ -208,8 +208,8 @@ return UserError.invalid`Invalid user data`.with({ cause: previousError });
 Errors without template holes are plain error objects (`NoContextErr`), like every other error:
 they serialize with `JSON.stringify` and can be sent through `structuredClone`, `postMessage`
 and worker or IPC boundaries. A structured clone carries the data (`set`, `kind`, `message`,
-`data`, `cause`) but not the brand symbol, so guards don't recognize the clone; rehydration
-with `from()` is planned for 0.5.0.
+`data`, `cause`) but not the brand symbol, so guards don't recognize the clone until you
+rehydrate it with [`from()`](#rehydration-from).
 
 ### Error Chaining
 
@@ -599,6 +599,29 @@ serializes the same way, recursively; a native `Error` cause becomes `{ name, me
 `toJSON` and `toString` are non-enumerable, so `Object.keys(err)` and spreading are
 unchanged. Stack traces are not included in the JSON output.
 
+### Rehydration: `from()`
+
+The brand is a symbol, so an error that went through `JSON.stringify`, `structuredClone`,
+`postMessage`, a worker or an HTTP response comes back as plain data that no guard
+recognizes. `X.from(value)` turns it back into an error of set `X`:
+
+```typescript
+const body: unknown = await response.json();
+const err = UserError.from(body);   // typeof UserError.Type | undefined
+
+if (UserError.not_found(err)) {
+  console.log(err.data.id);
+}
+```
+
+`from()` checks that `value` is `{ set, kind, message, data, cause?, timestamp? }` with `set`
+equal to the set's name, `kind` one of its kinds, `message` a string, `data` a plain object
+and `timestamp` (if present) a number, and returns a branded, frozen error; for anything else
+it returns `undefined`, so it is also a safe parser for untrusted input. Extra fields (such
+as a `stack`) are ignored, the `timestamp` is kept, and no new stack is captured. `cause` is
+kept as it arrived: rehydrate an errorset cause with its own set (`DbError.from(err.cause)`).
+A live error of the set is returned unchanged.
+
 ---
 
 ## API Reference
@@ -624,6 +647,7 @@ unchanged. Stack traces are not included in the JSON output.
 | `Set.captureAsync(fn, map)` | Wrap async code |
 | `[...Set]` / `Set.kinds` | Iterate / list kinds |
 | `JSON.stringify(err)` / `String(err)` | Serialize / format an error |
+| `Set.from(value)` | Rehydrate a serialized or cloned error (or `undefined`) |
 | `configure(options)` | Set global options (returns a restore function) |
 | `ERR`, `ERR_PROTOCOL` | Brand symbol and protocol number |
 | `RESERVED_KINDS` | Kind names that can't be used |

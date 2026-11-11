@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`XError.from(value)` rehydrates errors after JSON, `structuredClone`, workers or HTTP (audit A5, TASK-065).** It validates `{ set, kind, message, data, cause?, timestamp? }` (the set's own name, one of its kinds, a string message, a plain-object `data`, a numeric `timestamp`) and returns a branded, frozen error that every guard recognizes, with the same shape, `toJSON`, `toString` and (for empty `data`) `.with()` as a created error; anything else returns `undefined`. Extra fields are ignored, `timestamp` is kept, no stack is captured, `cause` is kept as-is (rehydrate an errorset cause with its own set's `from`), and a live error of the set is returned unchanged. There is no top-level `fromJSON`: rehydration needs the set to validate the kind.
+
 ## [0.4.0] - 2026-11-11
 
 ### Breaking changes

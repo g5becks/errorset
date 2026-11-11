@@ -411,6 +411,22 @@ const serializationDescriptors = (
 /** The `data` of every no-context error: one shared, frozen empty object. @internal */
 const EMPTY_DATA = Object.freeze({}) as Record<string, never>
 
+/** Validated fields of a serialized error, as accepted by `XError.from()`. @internal */
+type RehydrateFields = {
+  message: string
+  data: object
+  cause: unknown
+  timestamp: number | undefined
+}
+
+/**
+ * Rebuilds an error of one kind from validated fields. Kept out of the kind function's
+ * own properties (so kinds and reserved names are unaffected) and looked up by `from()`.
+ *
+ * @internal
+ */
+const rehydrators = new WeakMap<object, (fields: RehydrateFields) => object>()
+
 /**
  * Captures a stack trace on the target object if available (V8 engines only).
  * This is a zero-cost operation in non-V8 environments.
@@ -550,6 +566,35 @@ export function createKindFunction<
     with: { value: withOptions },
   }
 
+  // Rehydration (XError.from): same shape and descriptors as a created error, with the
+  // serialized timestamp kept and no stack. Empty data means the no-context shape.
+  const rehydrate = ({
+    message,
+    data,
+    cause,
+    timestamp,
+  }: RehydrateFields): object => {
+    const noContext = Object.keys(data).length === 0
+    const ownData = noContext ? EMPTY_DATA : Object.freeze({ ...data })
+    const err = {
+      [ERR]: ERR_PROTOCOL,
+      set: name,
+      kind,
+      message,
+      data: ownData,
+      ...(cause !== undefined && { cause }),
+      ...(timestamp !== undefined && { timestamp }),
+      [INSPECT]() {
+        return `${name}.${kind} ${JSON.stringify(ownData)}`
+      },
+    }
+    Object.defineProperties(
+      err,
+      noContext ? noContextDescriptors : serialization
+    )
+    return Object.freeze(err)
+  }
+
   // The dual-purpose function
   const kindFn = <K extends keyof T & string>(
     stringsOrValue: TemplateStringsArray | object | null | undefined,
@@ -647,7 +692,47 @@ export function createKindFunction<
     configurable: false,
   })
 
+  rehydrators.set(kindFn, rehydrate)
+
   return kindFn as KindFunction<Kind, T, N>
+}
+
+/**
+ * `XError.from(value)`: validates a serialized error of the set named `name` and
+ * returns a branded, frozen error, or `undefined` when the value doesn't match.
+ *
+ * @internal
+ */
+const rehydrateFrom = (
+  value: unknown,
+  name: string,
+  kindFns: ReadonlyMap<string, object>,
+  isMember: (value: unknown) => boolean
+): object | undefined => {
+  if (typeof value !== "object" || value === null) {
+    return
+  }
+  // Already a live error of this set (this copy of errorset or another one)
+  if (isMember(value)) {
+    return value
+  }
+  const candidate = value as Record<string, unknown>
+  const { set, kind, message, data, cause, timestamp } = candidate
+  if (set !== name || typeof kind !== "string" || typeof message !== "string") {
+    return
+  }
+  const kindFn = kindFns.get(kind)
+  const rehydrate = kindFn && rehydrators.get(kindFn)
+  if (
+    rehydrate === undefined ||
+    typeof data !== "object" ||
+    data === null ||
+    Array.isArray(data) ||
+    (timestamp !== undefined && typeof timestamp !== "number")
+  ) {
+    return
+  }
+  return rehydrate({ message, data, cause, timestamp })
 }
 
 /**
@@ -1202,6 +1287,24 @@ export type ErrorSet<
   readonly Type: Err<Kinds, Partial<T>, N>
 
   /**
+   * Rehydrates an error of this set after JSON, `structuredClone`, `postMessage` or
+   * any other transport that drops the brand symbol.
+   *
+   * Validates `{ set, kind, message, data, cause?, timestamp? }` (`set` must be this
+   * set's name, `kind` one of its kinds, `data` a plain object) and returns a branded,
+   * frozen error that every guard recognizes, or `undefined` for anything else. Extra
+   * fields are ignored; `cause` is kept as-is (rehydrate it with its own set's `from`);
+   * no stack is captured. A live error of this set is returned unchanged.
+   *
+   * @example
+   * ```ts
+   * const err = UserError.from(JSON.parse(body))
+   * if (UserError.not_found(err)) { ... }
+   * ```
+   */
+  from(value: unknown): Err<Kinds, Partial<T>, N> | undefined
+
+  /**
    * Expression-style error handling with guaranteed recovery.
    */
   recover<Success, R>(
@@ -1358,9 +1461,11 @@ export function errorSet<
 
       // Create kind functions and attach to guard
       const errorSetObj = guard as unknown as ErrorSet<Kinds[number], T, N>
+      const kindFns = new Map<string, object>()
 
       for (const kind of kinds) {
         const kindFn = createKindFunction<string, T, N>(kind, name, config)
+        kindFns.set(kind, kindFn)
         Object.defineProperty(errorSetObj, kind, {
           value: kindFn,
           writable: false,
@@ -1368,6 +1473,19 @@ export function errorSet<
           configurable: false,
         })
       }
+
+      // Attach from(): rehydration after JSON / structuredClone
+      Object.defineProperty(errorSetObj, "from", {
+        value: (
+          value: unknown
+        ): Err<Kinds[number], Partial<T>, N> | undefined =>
+          rehydrateFrom(value, name, kindFns, guard) as
+            | Err<Kinds[number], Partial<T>, N>
+            | undefined,
+        writable: false,
+        enumerable: false,
+        configurable: false,
+      })
 
       // Attach Type helper (returns undefined but provides type inference)
       Object.defineProperty(errorSetObj, "Type", {

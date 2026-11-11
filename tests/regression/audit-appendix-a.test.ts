@@ -154,14 +154,13 @@ describe("A4 no-context error shape", () => {
   })
 })
 
-describe("A5 brand lost across serialization (v0.5.0)", () => {
-  test.failing("A5 [TASK-065 v0.5.0] XError.from() rehydrates a JSON round-tripped error", () => {
+describe("A5 brand lost across serialization", () => {
+  test("A5 [TASK-065] XError.from() rehydrates a JSON round-tripped error", () => {
     const E = errorSet("E", ["boom"]).init<IdCtx>()
     const parsed: unknown = JSON.parse(
       JSON.stringify(E.boom`id ${"id"}`({ id: "1" }))
     )
-    const { from } = E as unknown as { from: (value: unknown) => unknown }
-    expect(E(from(parsed))).toBe(true)
+    expect(E(E.from(parsed))).toBe(true)
   })
 })
 

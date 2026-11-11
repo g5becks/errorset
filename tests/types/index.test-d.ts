@@ -500,3 +500,18 @@ expectTypeOf(withNativeCause.cause).toEqualTypeOf<unknown>()
 expectTypeOf(
   UserError.invalid`Invalid`.with({ cause: "plain value" })
 ).toExtend<Err<"invalid", Record<string, never>, "UserError">>()
+
+// =============================================================================
+// from(): rehydration after JSON / structuredClone (0.5.0, audit A5)
+// =============================================================================
+
+const rehydrated = UserError.from(JSON.parse("{}"))
+expectTypeOf(rehydrated).toEqualTypeOf<typeof UserError.Type | undefined>()
+if (rehydrated !== undefined) {
+  expectTypeOf(rehydrated.set).toEqualTypeOf<"UserError">()
+  expectTypeOf(rehydrated.kind).toEqualTypeOf<
+    "not_found" | "suspended" | "invalid"
+  >()
+}
+// from() accepts any value
+expectTypeOf(UserError.from).parameter(0).toBeUnknown()
