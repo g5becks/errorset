@@ -123,6 +123,20 @@ describe("from() round-trips", () => {
     expect("stack" in restored).toBe(false)
   })
 
+  it("has the created error's inspect output", () => {
+    const inspectOf = (value: unknown): unknown =>
+      (value as Record<symbol, () => unknown>)[
+        Symbol.for("nodejs.util.inspect.custom")
+      ]?.()
+    const original = template()
+    expect(inspectOf(UserError.from(viaJson(original)))).toBe(
+      inspectOf(original)
+    )
+    expect(inspectOf(UserError.from(viaJson(noContext())))).toBe(
+      inspectOf(noContext())
+    )
+  })
+
   it("returns an error of this set unchanged", () => {
     const original = template()
     expect(UserError.from(original)).toBe(original)
