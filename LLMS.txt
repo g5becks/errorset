@@ -130,6 +130,34 @@ function getUser(id: string): User | UserError { ... }
 if (UserError(result)) { ... }
 ```
 
+### Exact Data per Kind
+
+With an array of kinds, a kind guard can't know which fields a kind's errors carry, so it
+narrows `data` to `Partial<T>`. Declare each kind's data keys instead, and kind guards narrow
+`data` to exactly those keys:
+
+```typescript
+const UserError = errorSet("UserError", {
+  not_found: ["id"],
+  suspended: ["id", "reason"],
+  invalid: [],
+}).init<User>();
+
+if (UserError.suspended(result)) {
+  result.data.reason; // string, not string | undefined
+}
+
+UserError.suspended`User ${"id"} is suspended`(user); // data: { id, reason }
+UserError.not_found`User not found`({ id });           // still takes the entity
+UserError.invalid`Invalid user`;                       // no keys: a no-context error
+```
+
+An error of a declared kind always carries exactly its declared keys, taken from the entity
+you pass (which must have all of them), whichever keys the message uses; template holes may
+only use declared keys, and `init<T>()` requires `T` to have every declared key.
+`from()` rejects serialized data that lacks a declared key. Set-level types (`typeof
+UserError.Type`, the set guard, `recover` handlers) still use `Partial<T>`.
+
 ### Per-Instance Configuration
 
 You can pass configuration options to `.init<T>()`:

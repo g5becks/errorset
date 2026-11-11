@@ -239,6 +239,7 @@ const reservedKindNames: ReadonlySet<string> = new Set(RESERVED_KINDS)
 export type ErrorSetBuilder<
   Kinds extends readonly string[],
   N extends string = string,
+  Spec extends KindKeys | undefined = undefined,
 > = {
   /**
    * Initialize the error set with an entity type.
@@ -257,8 +258,52 @@ export type ErrorSetBuilder<
    *   .init<User>({ includeStack: true })
    * ```
    */
-  init<T extends object>(config?: ErrorSetConfig): ErrorSet<Kinds[number], T, N>
+  init<T extends object & { [K in DeclaredKeyUnion<Spec>]: unknown }>(
+    config?: ErrorSetConfig
+  ): ErrorSet<Kinds[number], T, N, Spec>
 }
+
+/**
+ * Object form of `errorSet()`'s kinds: each kind name maps to the entity keys its
+ * errors carry in `data`, e.g. `{ not_found: ["id"], suspended: ["id", "reason"] }`.
+ */
+export type KindKeys = Readonly<Record<string, readonly string[]>>
+
+/** Every key declared in a `KindKeys` spec (never for the array form). @internal */
+type DeclaredKeyUnion<Spec> = Spec extends KindKeys
+  ? Spec[keyof Spec][number]
+  : never
+
+/**
+ * The declared data keys of kind `K`, wrapped so that "declared, but no keys" (`never`)
+ * differs from "not declared" (`undefined`, the array form).
+ */
+export type DeclaredKeys<Spec, K> = Spec extends KindKeys
+  ? K extends keyof Spec
+    ? { readonly keys: Spec[K][number] }
+    : undefined
+  : undefined
+
+/** `data` of a kind: exactly the declared keys, or `Partial<T>` for the array form. */
+export type KindData<T, Declared> = Declared extends {
+  readonly keys: infer D extends string
+}
+  ? Pick<T, D & keyof T>
+  : Partial<T>
+
+/**
+ * Rejects reserved kind names in the object form, naming the word (like `NoReserved`).
+ */
+export type NoReservedKeys<Spec extends KindKeys> = [
+  Extract<keyof Spec, ReservedKind>,
+] extends [never]
+  ? Spec
+  : {
+      readonly [K in Extract<
+        keyof Spec,
+        ReservedKind
+      >]: `"${K & string}" is a reserved kind name in errorset; rename the kind`
+    }
 
 /**
  * Function returned by template literal that creates the error.
@@ -308,15 +353,25 @@ export type KindConstructor<
   Kind extends string,
   T extends object,
   N extends string = string,
-> = {
-  // Overload for no template holes - returns a plain error object
-  (strings: TemplateStringsArray): NoContextErr<Kind, N>
-  // Overload for template holes - returns ErrorCreator
-  <K extends keyof T & string>(
-    strings: TemplateStringsArray,
-    ...keys: K[]
-  ): ErrorCreator<Kind, T, K, N>
-}
+  Declared extends { readonly keys: string } | undefined = undefined,
+> = Declared extends { readonly keys: infer D extends string }
+  ? [D & keyof T] extends [never]
+    ? // Declared with no keys: only no-context errors
+      (strings: TemplateStringsArray) => NoContextErr<Kind, N>
+    : // Declared keys: holes limited to them, data is always exactly those keys
+      (
+        strings: TemplateStringsArray,
+        ...keys: (D & keyof T & string)[]
+      ) => ErrorCreator<Kind, T, D & keyof T, N>
+  : {
+      // Overload for no template holes - returns a plain error object
+      (strings: TemplateStringsArray): NoContextErr<Kind, N>
+      // Overload for template holes - returns ErrorCreator
+      <K extends keyof T & string>(
+        strings: TemplateStringsArray,
+        ...keys: K[]
+      ): ErrorCreator<Kind, T, K, N>
+    }
 
 /**
  * Kind-level guard function type.
@@ -326,7 +381,8 @@ export type KindGuard<
   Kind extends string,
   T extends object,
   N extends string = string,
-> = (value: unknown) => value is Err<Kind, Partial<T>, N>
+  Declared extends { readonly keys: string } | undefined = undefined,
+> = (value: unknown) => value is Err<Kind, KindData<T, Declared>, N>
 
 /**
  * Dual-purpose kind function that acts as both:
@@ -337,7 +393,8 @@ export type KindFunction<
   Kind extends string,
   T extends object,
   N extends string = string,
-> = KindConstructor<Kind, T, N> & KindGuard<Kind, T, N>
+  Declared extends { readonly keys: string } | undefined = undefined,
+> = KindConstructor<Kind, T, N, Declared> & KindGuard<Kind, T, N, Declared>
 
 /**
  * JSON shape of an error: `{ set, kind, message, data, cause?, timestamp? }`.
@@ -423,7 +480,10 @@ type RehydrateFields = {
  *
  * @internal
  */
-const rehydrators = new WeakMap<object, (fields: RehydrateFields) => object>()
+const rehydrators = new WeakMap<
+  object,
+  (fields: RehydrateFields) => object | undefined
+>()
 
 /**
  * Captures a stack trace on the target object if available (V8 engines only).
@@ -521,7 +581,8 @@ export function createKindFunction<
 >(
   kind: Kind,
   name: N,
-  instanceConfig?: Partial<Config>
+  instanceConfig?: Partial<Config>,
+  declaredKeys?: readonly string[]
 ): KindFunction<Kind, T, N> {
   // One `toString` per kind, shared by every error of this kind: "<Set>.<kind>: <message>"
   const errToString = function (this: { message: string }): string {
@@ -571,9 +632,21 @@ export function createKindFunction<
     data,
     cause,
     timestamp,
-  }: RehydrateFields): object => {
-    const noContext = Object.keys(data).length === 0
-    const ownData = noContext ? EMPTY_DATA : Object.freeze({ ...data })
+  }: RehydrateFields): object | undefined => {
+    // A kind with declared keys needs every one of them, and keeps only them
+    if (
+      declaredKeys !== undefined &&
+      !declaredKeys.every(key => Object.hasOwn(data, key))
+    ) {
+      return
+    }
+    const source = declaredKeys
+      ? Object.fromEntries(
+          declaredKeys.map(key => [key, (data as Record<string, unknown>)[key]])
+        )
+      : data
+    const noContext = Object.keys(source).length === 0
+    const ownData = noContext ? EMPTY_DATA : Object.freeze({ ...source })
     const err = {
       [ERR]: ERR_PROTOCOL,
       set: name,
@@ -610,18 +683,21 @@ export function createKindFunction<
       // When no template keys, return a plain error object directly
       // This allows: BackupError.config_invalid`S3 config required`
       // and, with options: BackupError.config_invalid`S3 config required`.with({ cause })
-      if (keys.length === 0) {
+      // (A kind with declared keys always takes the entity, unless it declares none.)
+      if (keys.length === 0 && !declaredKeys?.length) {
         return createNoContext(strings.join(""), undefined, kindFn)
       }
+      // Data keys: the declared ones (object form) or the template's holes
+      const dataKeys = (declaredKeys ?? keys) as readonly K[]
 
       // Return error creator function for template with keys
       const creator = (
         entity: Pick<T, K>,
         options?: ErrorOptions
       ): Err<Kind, Pick<T, K>, N> => {
-        // Extract only referenced fields into data
+        // Extract only the data keys into data
         const data = {} as Record<string, unknown>
-        for (const key of keys) {
+        for (const key of dataKeys) {
           data[key] = entity[key]
         }
 
@@ -1405,9 +1481,10 @@ export type ErrorSet<
   Kinds extends string,
   T extends object,
   N extends string = string,
+  Spec extends KindKeys | undefined = undefined,
 > = SetGuardWithKinds<Kinds, T, N> & {
   /** Kind constructors indexed by kind name */
-  [K in Kinds]: KindFunction<K, T, N>
+  [K in Kinds]: KindFunction<K, T, N, DeclaredKeys<Spec, K>>
 } & {
   /**
    * Type helper for exporting error set type.
@@ -1512,6 +1589,40 @@ const registerSetName = (name: string, kinds: readonly string[]): void => {
 }
 
 /**
+ * Splits `errorSet()`'s second argument into kind names and, for the object form, the
+ * declared data keys per kind. Validates the shape for untyped callers.
+ *
+ * @internal
+ */
+const normalizeKinds = (
+  name: string,
+  kindsOrSpec: unknown
+): {
+  kinds: readonly string[]
+  declared: Readonly<Record<string, readonly string[]>> | undefined
+} => {
+  if (Array.isArray(kindsOrSpec)) {
+    return { kinds: kindsOrSpec as readonly string[], declared: undefined }
+  }
+  if (typeof kindsOrSpec !== "object" || kindsOrSpec === null) {
+    throw new Error(
+      `errorSet("${name}", kinds): kinds must be an array of kind names or an object of kind names to data keys`
+    )
+  }
+  // Null prototype, so a "__proto__" kind is a key here (and then rejected as reserved)
+  const declared: Record<string, readonly string[]> = Object.create(null)
+  for (const [kind, keys] of Object.entries(kindsOrSpec)) {
+    if (!(Array.isArray(keys) && keys.every(key => typeof key === "string"))) {
+      throw new Error(
+        `Kind "${kind}" in error set "${name}" must list its data keys as an array of strings`
+      )
+    }
+    declared[kind] = [...new Set(keys as string[])]
+  }
+  return { kinds: Object.keys(declared), declared }
+}
+
+/**
  * Creates a domain-bound error set builder.
  *
  * Error sets are tied to entity types - template literal holes are constrained
@@ -1559,11 +1670,36 @@ const registerSetName = (name: string, kinds: readonly string[]): void => {
 export function errorSet<
   N extends string,
   const Kinds extends readonly string[],
->(name: N, kinds: NoReserved<NoDuplicates<Kinds>>): ErrorSetBuilder<Kinds, N> {
+>(name: N, kinds: NoReserved<NoDuplicates<Kinds>>): ErrorSetBuilder<Kinds, N>
+/**
+ * Object form: each kind lists the entity keys its errors carry, so kind guards narrow
+ * `data` to exactly those keys (`Pick<T, keys>`) instead of `Partial<T>`.
+ *
+ * @example
+ * ```ts
+ * const UserError = errorSet("UserError", {
+ *   not_found: ["id"],
+ *   suspended: ["id", "reason"],
+ * }).init<User>()
+ *
+ * if (UserError.suspended(result)) {
+ *   result.data.reason // string, no `!` needed
+ * }
+ * ```
+ */
+export function errorSet<N extends string, const Spec extends KindKeys>(
+  name: N,
+  kinds: NoReservedKeys<Spec>
+): ErrorSetBuilder<(keyof Spec & string)[], N, Spec>
+export function errorSet<N extends string>(
+  name: N,
+  kindsOrSpec: readonly string[] | KindKeys
+): ErrorSetBuilder<readonly string[], N, KindKeys | undefined> {
+  const { kinds, declared } = normalizeKinds(name, kindsOrSpec)
   // Runtime validation for JavaScript consumers or edge cases, before any property
   // is defined on the set
   const seen = new Set<string>()
-  for (const kind of kinds as readonly string[]) {
+  for (const kind of kinds) {
     if (reservedKindNames.has(kind)) {
       throw new Error(
         `"${kind}" is a reserved kind name in errorset; rename the kind`
@@ -1578,18 +1714,23 @@ export function errorSet<
   return {
     init<T extends object>(
       config?: ErrorSetConfig
-    ): ErrorSet<Kinds[number], T, N> {
+    ): ErrorSet<string, T, N, KindKeys | undefined> {
       registerSetName(name, kinds)
 
       // Create the base guard: errors of these kinds created by the set named `name`
-      const guard = createSetGuardWithKinds<Kinds[number], T, N>(kinds, name)
+      const guard = createSetGuardWithKinds<string, T, N>(kinds, name)
 
       // Create kind functions and attach to guard
-      const errorSetObj = guard as unknown as ErrorSet<Kinds[number], T, N>
+      const errorSetObj = guard as unknown as ErrorSet<string, T, N>
       const kindFns = new Map<string, object>()
 
       for (const kind of kinds) {
-        const kindFn = createKindFunction<string, T, N>(kind, name, config)
+        const kindFn = createKindFunction<string, T, N>(
+          kind,
+          name,
+          config,
+          declared?.[kind]
+        )
         kindFns.set(kind, kindFn)
         Object.defineProperty(errorSetObj, kind, {
           value: kindFn,
@@ -1601,11 +1742,9 @@ export function errorSet<
 
       // Attach from(): rehydration after JSON / structuredClone
       Object.defineProperty(errorSetObj, "from", {
-        value: (
-          value: unknown
-        ): Err<Kinds[number], Partial<T>, N> | undefined =>
+        value: (value: unknown): Err<string, Partial<T>, N> | undefined =>
           rehydrateFrom(value, name, kindFns, guard) as
-            | Err<Kinds[number], Partial<T>, N>
+            | Err<string, Partial<T>, N>
             | undefined,
         writable: false,
         enumerable: false,
@@ -1623,8 +1762,8 @@ export function errorSet<
       // Attach recover method bound to this guard
       Object.defineProperty(errorSetObj, "recover", {
         value: <Success, R>(
-          value: Success | Err<Kinds[number], Partial<T>, N>,
-          handlers: RecoverHandlers<Kinds[number], T, R, N>
+          value: Success | Err<string, Partial<T>, N>,
+          handlers: RecoverHandlers<string, T, R, N>
         ): Success | R => recover(value, guard, handlers),
         writable: false,
         enumerable: false,
@@ -1634,8 +1773,8 @@ export function errorSet<
       // Attach inspect method bound to this guard
       Object.defineProperty(errorSetObj, "inspect", {
         value: <Success>(
-          value: Success | Err<Kinds[number], Partial<T>, N>,
-          handlers: InspectHandlers<Kinds[number], T, N>
+          value: Success | Err<string, Partial<T>, N>,
+          handlers: InspectHandlers<string, T, N>
         ): void => inspect(value, guard, handlers),
         writable: false,
         enumerable: false,
@@ -1654,9 +1793,8 @@ export function errorSet<
       Object.defineProperty(errorSetObj, "capture", {
         value: <Result>(
           fn: () => Result,
-          mapper: ErrorMapper<Kinds[number], T, N>
-        ): Result | Err<Kinds[number], Partial<T>, N> =>
-          captureSync(fn, mapper),
+          mapper: ErrorMapper<string, T, N>
+        ): Result | Err<string, Partial<T>, N> => captureSync(fn, mapper),
         writable: false,
         enumerable: false,
         configurable: false,
@@ -1666,8 +1804,8 @@ export function errorSet<
       Object.defineProperty(errorSetObj, "captureAsync", {
         value: <Result>(
           fn: () => Promise<Result>,
-          mapper: ErrorMapper<Kinds[number], T, N>
-        ): Promise<Result | Err<Kinds[number], Partial<T>, N>> =>
+          mapper: ErrorMapper<string, T, N>
+        ): Promise<Result | Err<string, Partial<T>, N>> =>
           captureAsync(fn, mapper),
         writable: false,
         enumerable: false,
@@ -1684,7 +1822,7 @@ export function errorSet<
         configurable: false,
       })
 
-      return errorSetObj
+      return errorSetObj as ErrorSet<string, T, N, KindKeys | undefined>
     },
   }
 }
