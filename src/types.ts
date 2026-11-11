@@ -1385,6 +1385,44 @@ export function merge<G extends [MergeInput, ...MergeInput[]]>(
 }
 
 /**
+ * Converts an errorset error into a real `Error`, for loggers, APMs, error reporters and
+ * APIs that require `Error` instances (they read `name`, `message` and `stack`).
+ *
+ * The result is a new, ordinary (not frozen) `Error` with `name` `"<Set>.<kind>"`, the
+ * error's `message`, `cause` set to the original error, and a stack captured where
+ * `toError` is called. The original error is unchanged and still recognizable through
+ * `cause` (`UserError(error.cause)`).
+ *
+ * @param err - An error from any error set (either shape)
+ * @returns A new Error wrapping `err`
+ *
+ * @example
+ * ```ts
+ * if (UserError(result)) {
+ *   logger.error(toError(result))  // name "UserError.not_found", stack, cause
+ *   Sentry.captureException(toError(result))
+ * }
+ * ```
+ */
+export function toError<E extends Err<string, object, string>>(
+  err: E
+): Error & { readonly cause: E } {
+  const error = new Error(err.message, { cause: err })
+  // Own and non-enumerable, like the built-in properties of an Error
+  Object.defineProperty(error, "name", {
+    value: `${err.set}.${err.kind}`,
+    writable: true,
+    enumerable: false,
+    configurable: true,
+  })
+  if (typeof Error.captureStackTrace === "function") {
+    // Start the stack at the caller, and render the header with the new name
+    Error.captureStackTrace(error, toError)
+  }
+  return error as Error & { readonly cause: E }
+}
+
+/**
  * Error mapper function type for capture.
  * Receives the caught Error and returns an error set value.
  */

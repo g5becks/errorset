@@ -59,4 +59,5 @@ export {
   recover,
   type SetGuard,
   type SetGuardWithKinds,
+  toError,
 } from "./types.ts"

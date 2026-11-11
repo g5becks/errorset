@@ -644,6 +644,25 @@ serializes the same way, recursively; a native `Error` cause becomes `{ name, me
 `toJSON` and `toString` are non-enumerable, so `Object.keys(err)` and spreading are
 unchanged. Stack traces are not included in the JSON output.
 
+### Error-Typed APIs: `toError()`
+
+Errors are plain data, not `Error` instances. Loggers, APMs, error reporters and APIs that
+require an `Error` key off `name`, `message` and `stack`, so convert at that boundary:
+
+```typescript
+import { toError } from "@takinprofit/errorset";
+
+if (UserError(result)) {
+  logger.error(toError(result));         // name "UserError.not_found", message, stack
+  Sentry.captureException(toError(result));
+  throw toError(result);                 // when a framework expects a thrown Error
+}
+```
+
+`toError(err)` returns a new, ordinary `Error` with `name` `"<Set>.<kind>"`, the error's
+`message`, `cause` set to the original error (still recognized by its guards:
+`UserError(error.cause)`), and a stack captured where `toError` is called.
+
 ### Rehydration: `from()`
 
 The brand is a symbol, so an error that went through `JSON.stringify`, `structuredClone`,
@@ -693,6 +712,7 @@ A live error of the set is returned unchanged.
 | `[...Set]` / `Set.kinds` | Iterate / list kinds |
 | `JSON.stringify(err)` / `String(err)` | Serialize / format an error |
 | `Set.from(value)` | Rehydrate a serialized or cloned error (or `undefined`) |
+| `toError(err)` | A real `Error` for loggers, APMs and Error-typed APIs |
 | `configure(options)` | Set global options (returns a restore function) |
 | `ERR`, `ERR_PROTOCOL` | Brand symbol and protocol number |
 | `RESERVED_KINDS` | Kind names that can't be used |

@@ -15,6 +15,7 @@ import {
   type KindFunction,
   type NoContextErr,
   type NoDuplicates,
+  toError,
 } from "../../src/index.ts"
 
 // =============================================================================
@@ -515,3 +516,15 @@ if (rehydrated !== undefined) {
 }
 // from() accepts any value
 expectTypeOf(UserError.from).parameter(0).toBeUnknown()
+
+// =============================================================================
+// toError(): a real Error for Error-typed APIs (0.5.0, audit A7)
+// =============================================================================
+
+const forLogger = toError(UserError.not_found`User ${"id"}`({ id: "1" }))
+expectTypeOf(forLogger).toExtend<Error>()
+expectTypeOf(forLogger.cause).toEqualTypeOf<
+  Err<"not_found", Pick<User, "id">, "UserError">
+>()
+// @ts-expect-error - only errorset errors can be converted
+toError(new Error("plain"))
