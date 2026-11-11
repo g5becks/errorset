@@ -1,11 +1,11 @@
 ---
 id: TASK-061
 title: 'Correctness: immutable errors (frozen error and data)'
-status: In Progress
+status: Done
 assignee:
   - '@claude'
 created_date: '2026-11-10T17:35:00Z'
-updated_date: '2026-11-11T02:22:00Z'
+updated_date: '2026-11-11T02:34:00Z'
 labels: []
 milestone: m-1
 dependencies:
@@ -35,7 +35,7 @@ type: bug
 - [x] #1 Errors and their data are frozen; writes throw (tests); A8 regression case passes
 - [x] #2 Freezing adds at most 2 freezes per error, ≤ 20 ns per error on the reference machine, measured with and without freezing on the same commit (5 runs each).
 - [x] #3 CHANGELOG.md lists the change under ## [Unreleased] > ### Breaking changes with migration steps
-- [ ] #4 bash scripts/ci-local.sh HEAD prints RESULT: PASS
+- [x] #4 bash scripts/ci-local.sh HEAD prints RESULT: PASS
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -64,4 +64,6 @@ type: bug
 - Budget relaxed by maintainer decision 2026-11-10; original 10% assumed freezing costs a few ns, measured ~6–9 ns per freeze.
 - Maintainer chose option (a): keep freezing both the error and its data and accept the measured cost. AC #2 rewritten to the maintainer's wording and checked with the existing measurements: template errors 2 freezes, +14.5 ns; no-context errors 1 freeze (shared frozen EMPTY_DATA), +7.3 ns; both ≤ 20 ns (Bun 1.4.4, Apple M5, interleaved A/B on the same code, 5 runs each). Label 'blocked' removed.
 - CHANGELOG: added an [Unreleased] > ### Changed entry (frozen errors and data, strict-mode TypeError, measured cost); the breaking entry now points to it instead of 'pending a maintainer decision'.
+
+- Verified with scripts/ci-local.sh (74c1545, PASS); GitHub Actions unavailable (billing lock). Closed after the maintainer decision.
 <!-- SECTION:NOTES:END -->
