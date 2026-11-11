@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-11
+
+### Breaking changes
+
+- **Merged guards are typed per set, and `kinds` lists each name once (audit A9, TASK-067).** A merged guard used to type `data` as `Record<string, unknown>`; it now narrows to the union of the merged sets' error types, discriminated by `set`, so reading a `data` key that not every merged set has no longer compiles until you narrow (`if (err.set === "DbError") err.data.query`). `merged.kinds` no longer repeats a kind name that several sets share (membership was already per `(set, kind)` pair since 0.4.0, and is unchanged).
+  *Migration:* narrow merged errors by `set` (or with the original set's guard) before reading set-specific `data` fields. Code that counted or indexed duplicate names in `merged.kinds` must expect each name once.
+
+### Added
+
+- **`XError.from(value)` rehydrates errors after JSON, `structuredClone`, workers or HTTP (audit A5, TASK-065).** It validates `{ set, kind, message, data, cause?, timestamp? }` (the set's own name, one of its kinds, a string message, a plain-object `data`, a numeric `timestamp`) and returns a branded, frozen error that every guard recognizes, with the same shape, `toJSON`, `toString` and (for empty `data`) `.with()` as a created error; anything else returns `undefined`. Extra fields are ignored, `timestamp` is kept, no stack is captured, `cause` is kept as-is (rehydrate an errorset cause with its own set's `from`), and a live error of the set is returned unchanged. There is no top-level `fromJSON`: rehydration needs the set to validate the kind.
+
+- **Variadic, set-aware `merge` with `recover` and `inspect` (audit A9, TASK-067).** `merge(a, b, c, …)` and `X.merge(…others)` take any number of sets or merged guards; `(set, kind)` pairs are de-duplicated. The merged guard (`MergedGuard<E>`) narrows to the union of the sets' error types and has `recover` (exhaustive over every `(set, kind)` pair, or with a `_` catch-all), `inspect` and `merge`; handlers are nested by set name then kind (`{ OrderError: { rejected: e => … }, _: e => … }`) so sets that share a kind name get separate handlers. New exported types: `MergedGuard`, `MergedRecoverHandlers`, `MergedInspectHandlers`, `MergeInput`, `GuardedError`.
+
+- **Exact data per kind: `errorSet(name, { kind: [keys] })` (audit A14, TASK-068).** The object form declares each kind's data keys (`{ not_found: ["id"], suspended: ["id", "reason"] }`); kind guards then narrow `data` to exactly `Pick<T, keys>` instead of `Partial<T>`, so no `!` is needed. Errors of a declared kind carry exactly the declared keys, taken from the entity (which must provide all of them), even when the template uses fewer; template holes are limited to declared keys; a kind declared with `[]` creates no-context errors; `init<T>()` requires `T` to have every declared key; `from()` rejects data missing a declared key. Reserved names are rejected as in the array form. The array form is unchanged. New exported types: `KindKeys`, `KindData`, `DeclaredKeys`, `NoReservedKeys`.
+
+- **`toError(err)` adapter for Error-typed APIs (audit A7, TASK-070).** Returns a new, ordinary `Error` with `name` `"<Set>.<kind>"`, the error's `message`, `cause` set to the original errorset error (typed `Error & { readonly cause: E }`), and a stack captured at the call site (the `toError` frame excluded where `Error.captureStackTrace` exists). For loggers, APMs and reporters that read `name`/`message`/`stack`, and for APIs that require a thrown `Error`.
+
+### Changed
+
+- **Lossless message interpolation (audit A15, TASK-069).** Template values used to be rendered with `String(value ?? "")`, so objects became `[object Object]` and `null`/`undefined` became empty strings. Messages now render strings as-is, `null`/`undefined` literally, bigints with an `n` suffix (`10n`), dates as ISO strings (`Invalid Date` for invalid ones), errors and objects with their own `toString` (`URL`, errorset errors, custom classes) through it, functions as `[Function: name]`, and other objects and arrays as cycle-safe JSON (`"[Circular]"` for cycles only, truncated to 200 characters with `…`). `data` keeps the original values. Message text changes for those value types; code that matches exact messages built from them must expect the new text. No per-set `format` hook: formatting beyond this belongs to the logger.
+
+- **Faster error creation (audit P1, TASK-071).** `toJSON`, `toString` and the inspect hook moved to a shared prototype (an inspect getter returns a function bound to the error, so detached calls still work); each set caches its effective configuration until `configure()`, its disposer or `resetConfig()` changes it; the stack/timestamp work is skipped with one check when both are off; each kind reuses the creator of its last template call site; template strings are copied once per creator. Measured on the same machine (Bun 1.4.4, `bun run bench --runs 3` medians, before → after): template errors 178.7 → 56.2 ns (0.3.0 baseline 107.4 ns, so 1.9× faster than 0.3.0), no-context errors 149.7 → 33.8 ns, `includeStack` errors 595.6 → 460.3 ns; guards unchanged. Errors are still frozen and deep-equal, serialize, inspect and print exactly as before; `toJSON`/`toString` are now inherited rather than own properties (still non-enumerable), and `err.constructor` is still `Object`.
+
+- **Constant-time set guards (audit P2, TASK-072).** A set's guard keeps its kinds in a `Set` and inlines the brand, set and kind checks, so guard cost no longer grows with the number of kinds: a 40-kind set's guard on its last kind 43.0 → 5.1 ns, a 2-kind guard 6.8 → 5.6 ns (the 0.3.0 baseline, before set identity), non-errors 5.7 ns (Bun 1.4.4, `bun run bench --runs 5` medians). Merged guards keep per-set `Set`s.
+
+### Fixed
+
+- **A kind guard called with an array that has a `raw` property returned an error object (TASK-074).** `UserError.a(value)` detects tagged-template calls by shape, so an ordinary array with a `raw` array was treated as a template and returned a (truthy) error instead of `false`. Template strings must now also be frozen, as every real `TemplateStringsArray` is; the check runs only for call sites not seen before, so creation speed is unchanged (no-context creation got faster, 34 → 25 ns, from caching each call site's joined message). A deliberately frozen look-alike is still treated as a template.
+- **`init<T>()` accepts `interface` entity types (audit A13, TASK-066).** The entity constraint was `T extends Record<string, unknown>`, which interfaces don't satisfy (no implicit index signature), so `init<Account>()` failed with TS2344. Entity types and `Err`'s `Data` parameter are now constrained to `object`; template keys are still `keyof T & string`, bad keys still fail to compile, and type aliases behave as before.
+
 ## [0.4.0] - 2026-11-11
 
 ### Breaking changes
@@ -97,7 +127,8 @@ Initial release.
 - `recover`, `inspect`, `merge`, `capture` and `captureAsync` helpers, plus iteration over a set's kinds.
 - Error chaining with `cause`, custom debugger output, optional stack capture and global `configure()`.
 
-[Unreleased]: https://github.com/g5becks/errorset/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/g5becks/errorset/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/g5becks/errorset/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/g5becks/errorset/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/g5becks/errorset/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/g5becks/errorset/compare/v0.2.1...v0.3.0

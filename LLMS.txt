@@ -118,7 +118,7 @@ const UserError = errorSet("UserError", ["not_found", "suspended", "invalid"])
 export type UserError = typeof UserError.Type;
 ```
 
-The `errorSet` function uses TypeScript 5.0's `const` type parameter feature to automatically infer literal types from the array. This ensures `result.kind` is typed as `"not_found" | "suspended" | "invalid"` rather than just `string`.
+The entity type can be a type alias or an `interface`. The `errorSet` function uses TypeScript 5.0's `const` type parameter feature to automatically infer literal types from the array. This ensures `result.kind` is typed as `"not_found" | "suspended" | "invalid"` rather than just `string`.
 
 With this pattern, `UserError` works like a native class or enum — you can use it in both type and value positions:
 
@@ -129,6 +129,34 @@ function getUser(id: string): User | UserError { ... }
 // In value position (runtime guards)
 if (UserError(result)) { ... }
 ```
+
+### Exact Data per Kind
+
+With an array of kinds, a kind guard can't know which fields a kind's errors carry, so it
+narrows `data` to `Partial<T>`. Declare each kind's data keys instead, and kind guards narrow
+`data` to exactly those keys:
+
+```typescript
+const UserError = errorSet("UserError", {
+  not_found: ["id"],
+  suspended: ["id", "reason"],
+  invalid: [],
+}).init<User>();
+
+if (UserError.suspended(result)) {
+  result.data.reason; // string, not string | undefined
+}
+
+UserError.suspended`User ${"id"} is suspended`(user); // data: { id, reason }
+UserError.not_found`User not found`({ id });           // still takes the entity
+UserError.invalid`Invalid user`;                       // no keys: a no-context error
+```
+
+An error of a declared kind always carries exactly its declared keys, taken from the entity
+you pass (which must have all of them), whichever keys the message uses; template holes may
+only use declared keys, and `init<T>()` requires `T` to have every declared key.
+`from()` rejects serialized data that lacks a declared key. Set-level types (`typeof
+UserError.Type`, the set guard, `recover` handlers) still use `Partial<T>`.
 
 ### Per-Instance Configuration
 
@@ -193,6 +221,12 @@ err.data;    // { id: "123" } — only referenced fields
 
 This is the key insight: template holes aren't just for interpolation. They tell errorset which fields matter for this error, and those fields are automatically extracted into `err.data`.
 
+Values are rendered into the message without losing information: strings as-is, `null` and
+`undefined` literally, bigints as `10n`, dates as ISO strings, errors and objects with their own
+`toString` (such as `URL`) through it, functions by name, and other objects and arrays as JSON
+(cycles become `"[Circular]"`, and the JSON is cut to 200 characters). `err.data` always keeps
+the original values.
+
 ### Simplified Syntax for No-Context Errors
 
 When your error message doesn't need any context data, use the template literal directly:
@@ -208,8 +242,8 @@ return UserError.invalid`Invalid user data`.with({ cause: previousError });
 Errors without template holes are plain error objects (`NoContextErr`), like every other error:
 they serialize with `JSON.stringify` and can be sent through `structuredClone`, `postMessage`
 and worker or IPC boundaries. A structured clone carries the data (`set`, `kind`, `message`,
-`data`, `cause`) but not the brand symbol, so guards don't recognize the clone; rehydration
-with `from()` is planned for 0.5.0.
+`data`, `cause`) but not the brand symbol, so guards don't recognize the clone until you
+rehydrate it with [`from()`](#rehydration-from).
 
 ### Error Chaining
 
@@ -444,29 +478,40 @@ function processCheckout(id: string): Receipt | UserError | DbError {
 
 ### `merge` — Combine at Boundaries
 
-Merge error sets when you need to check for errors from multiple sources:
+Merge error sets when you need to check for errors from multiple sources. `merge` takes any
+number of sets (or merged guards); `X.merge(...)` does the same starting from `X`:
 
 ```typescript
-const UserError = errorSet("UserError", ["not_found", "suspended"]).init<User>();
-const DbError = errorSet("DbError", ["timeout", "connection"]).init<DbContext>();
+import { merge } from "@takinprofit/errorset";
 
-const ServiceError = UserError.merge(DbError);
+const UserError = errorSet("UserError", ["not_found", "suspended"]).init<User>();
+const DbError = errorSet("DbError", ["timeout", "not_found"]).init<DbContext>();
+const CacheError = errorSet("CacheError", ["miss"]).init<CacheKey>();
+
+const ServiceError = merge(UserError, DbError, CacheError); // or UserError.merge(DbError, CacheError)
 
 if (ServiceError(result)) {
-  // result.kind is "not_found" | "suspended" | "timeout" | "connection"
+  // result is UserError | DbError | CacheError: a union discriminated by `set`
+  if (result.set === "DbError") {
+    console.log(result.data.query); // narrowed to DbContext's data
+  }
 }
 ```
 
-**Note**: Merged sets lose data typing. For type-safe data access, use the original sets:
+Membership is by (set, kind) pair, so sets that share a kind name (`not_found` above) stay
+distinct, and `ServiceError.kinds` lists each name once. A merged guard has `recover` and
+`inspect`, with handlers nested by set name and then kind:
 
 ```typescript
-if (ServiceError(result)) {
-  if (UserError(result)) {
-    console.log(result.data.name);  // Type-safe
-  } else if (DbError(result)) {
-    console.log(result.data.query); // Type-safe
-  }
-}
+const status = ServiceError.recover(result, {
+  UserError: { not_found: () => 404, suspended: () => 403 },
+  DbError: { not_found: () => 404 },
+  _: () => 503, // required unless every (set, kind) pair has a handler
+});
+
+ServiceError.inspect(result, {
+  DbError: { timeout: e => metrics.increment("db.timeout") },
+});
 ```
 
 ### Iteration
@@ -599,6 +644,48 @@ serializes the same way, recursively; a native `Error` cause becomes `{ name, me
 `toJSON` and `toString` are non-enumerable, so `Object.keys(err)` and spreading are
 unchanged. Stack traces are not included in the JSON output.
 
+### Error-Typed APIs: `toError()`
+
+Errors are plain data, not `Error` instances. Loggers, APMs, error reporters and APIs that
+require an `Error` key off `name`, `message` and `stack`, so convert at that boundary:
+
+```typescript
+import { toError } from "@takinprofit/errorset";
+
+if (UserError(result)) {
+  logger.error(toError(result));         // name "UserError.not_found", message, stack
+  Sentry.captureException(toError(result));
+  throw toError(result);                 // when a framework expects a thrown Error
+}
+```
+
+`toError(err)` returns a new, ordinary `Error` with `name` `"<Set>.<kind>"`, the error's
+`message`, `cause` set to the original error (still recognized by its guards:
+`UserError(error.cause)`), and a stack captured where `toError` is called.
+
+### Rehydration: `from()`
+
+The brand is a symbol, so an error that went through `JSON.stringify`, `structuredClone`,
+`postMessage`, a worker or an HTTP response comes back as plain data that no guard
+recognizes. `X.from(value)` turns it back into an error of set `X`:
+
+```typescript
+const body: unknown = await response.json();
+const err = UserError.from(body);   // typeof UserError.Type | undefined
+
+if (UserError.not_found(err)) {
+  console.log(err.data.id);
+}
+```
+
+`from()` checks that `value` is `{ set, kind, message, data, cause?, timestamp? }` with `set`
+equal to the set's name, `kind` one of its kinds, `message` a string, `data` a plain object
+and `timestamp` (if present) a number, and returns a branded, frozen error; for anything else
+it returns `undefined`, so it is also a safe parser for untrusted input. Extra fields (such
+as a `stack`) are ignored, the `timestamp` is kept, and no new stack is captured. `cause` is
+kept as it arrived: rehydrate an errorset cause with its own set (`DbError.from(err.cause)`).
+A live error of the set is returned unchanged.
+
 ---
 
 ## API Reference
@@ -619,11 +706,13 @@ unchanged. Stack traces are not included in the JSON output.
 | `isErr(value)` | Universal guard |
 | `Set.recover(val, handlers)` | Expression-style handling |
 | `Set.inspect(val, handlers)` | Side effects only |
-| `Set.merge(other)` | Combine sets |
+| `merge(a, b, ...)` / `Set.merge(...others)` | Combine sets (set-aware, with `recover`/`inspect`) |
 | `Set.capture(fn, map)` | Wrap sync code |
 | `Set.captureAsync(fn, map)` | Wrap async code |
 | `[...Set]` / `Set.kinds` | Iterate / list kinds |
 | `JSON.stringify(err)` / `String(err)` | Serialize / format an error |
+| `Set.from(value)` | Rehydrate a serialized or cloned error (or `undefined`) |
+| `toError(err)` | A real `Error` for loggers, APMs and Error-typed APIs |
 | `configure(options)` | Set global options (returns a restore function) |
 | `ERR`, `ERR_PROTOCOL` | Brand symbol and protocol number |
 | `RESERVED_KINDS` | Kind names that can't be used |

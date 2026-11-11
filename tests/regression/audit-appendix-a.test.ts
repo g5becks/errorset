@@ -4,7 +4,8 @@
  * Each case asserts the behavior the fix must deliver, so today it fails and is marked
  * `test.failing`. Convention: the task that fixes a case changes it to `test` in the
  * same commit. Names are `<auditId> [<fixing task>] <expected behavior>`. At the v0.4.0
- * release only the cases scheduled for v0.5.0 (A5, A9) may still be `test.failing`.
+ * release only the cases scheduled for v0.5.0 (A5, A9) were still `test.failing`; since
+ * v0.5.0 (TASK-065, TASK-067) every case is a plain `test`.
  */
 
 import { afterEach, describe, expect, test } from "bun:test"
@@ -154,14 +155,13 @@ describe("A4 no-context error shape", () => {
   })
 })
 
-describe("A5 brand lost across serialization (v0.5.0)", () => {
-  test.failing("A5 [TASK-065 v0.5.0] XError.from() rehydrates a JSON round-tripped error", () => {
+describe("A5 brand lost across serialization", () => {
+  test("A5 [TASK-065] XError.from() rehydrates a JSON round-tripped error", () => {
     const E = errorSet("E", ["boom"]).init<IdCtx>()
     const parsed: unknown = JSON.parse(
       JSON.stringify(E.boom`id ${"id"}`({ id: "1" }))
     )
-    const { from } = E as unknown as { from: (value: unknown) => unknown }
-    expect(E(from(parsed))).toBe(true)
+    expect(E(E.from(parsed))).toBe(true)
   })
 })
 
@@ -198,8 +198,8 @@ describe("A8 mutable errors", () => {
   })
 })
 
-describe("A9 merge duplicates kinds (v0.5.0)", () => {
-  test.failing("A9 [TASK-067 v0.5.0] merge lists each kind once", () => {
+describe("A9 merge duplicates kinds", () => {
+  test("A9 [TASK-067] merge lists each kind once", () => {
     expect(merge(OrderError, PositionError).kinds).toEqual([
       "invalid_symbol",
       "order_rejected",

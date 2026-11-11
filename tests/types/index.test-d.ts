@@ -15,6 +15,7 @@ import {
   type KindFunction,
   type NoContextErr,
   type NoDuplicates,
+  toError,
 } from "../../src/index.ts"
 
 // =============================================================================
@@ -500,3 +501,30 @@ expectTypeOf(withNativeCause.cause).toEqualTypeOf<unknown>()
 expectTypeOf(
   UserError.invalid`Invalid`.with({ cause: "plain value" })
 ).toExtend<Err<"invalid", Record<string, never>, "UserError">>()
+
+// =============================================================================
+// from(): rehydration after JSON / structuredClone (0.5.0, audit A5)
+// =============================================================================
+
+const rehydrated = UserError.from(JSON.parse("{}"))
+expectTypeOf(rehydrated).toEqualTypeOf<typeof UserError.Type | undefined>()
+if (rehydrated !== undefined) {
+  expectTypeOf(rehydrated.set).toEqualTypeOf<"UserError">()
+  expectTypeOf(rehydrated.kind).toEqualTypeOf<
+    "not_found" | "suspended" | "invalid"
+  >()
+}
+// from() accepts any value
+expectTypeOf(UserError.from).parameter(0).toBeUnknown()
+
+// =============================================================================
+// toError(): a real Error for Error-typed APIs (0.5.0, audit A7)
+// =============================================================================
+
+const forLogger = toError(UserError.not_found`User ${"id"}`({ id: "1" }))
+expectTypeOf(forLogger).toExtend<Error>()
+expectTypeOf(forLogger.cause).toEqualTypeOf<
+  Err<"not_found", Pick<User, "id">, "UserError">
+>()
+// @ts-expect-error - only errorset errors can be converted
+toError(new Error("plain"))

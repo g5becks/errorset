@@ -557,16 +557,17 @@ describe("Tag Collisions in Merged Sets", () => {
   const MergedSet = SetA.merge(SetB)
 
   describe("merged set with colliding tag names", () => {
-    it("should contain both instances of colliding tags", () => {
-      // Merged kinds will have duplicates
+    it("should list colliding tags once while keeping both sets' errors", () => {
+      // Since 0.5.0 (audit A9) kinds lists each name once; membership is still
+      // per (set, kind), so both sets' errors with a colliding kind match
       expect(MergedSet.kinds).toEqual([
         "not_found",
         "invalid",
         "unique_a",
-        "not_found",
-        "invalid",
         "unique_b",
       ])
+      expect(MergedSet(SetA.not_found`A ${"idA"}`({ idA: "1" }))).toBe(true)
+      expect(MergedSet(SetB.not_found`B ${"idB"}`({ idB: "2" }))).toBe(true)
     })
 
     it("should match errors from both sets with colliding tags", () => {

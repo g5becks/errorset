@@ -163,7 +163,7 @@ defining anything. The full list is exported as `RESERVED_KINDS`: the set's memb
 
 **Why.** In 0.3 the member names compiled and then threw a cryptic `TypeError` at `init()`,
 and built-in names such as `name` silently shadowed function properties (audit A3). `from` is
-reserved for the rehydration API planned for 0.5.0.
+reserved for the rehydration API `X.from()`, added in 0.5.0.
 
 **Before (0.3):**
 
@@ -282,7 +282,7 @@ returns a new error and leaves the original unchanged.
 **Why.** A function can never cross a `structuredClone`, `postMessage`, worker or IPC
 boundary, and two error shapes made every consumer handle both (audit A4). A structured clone
 now carries the data (`set`, `kind`, `message`, `data`, `cause`) but not the brand symbol;
-rehydration with `from()` is planned for 0.5.0.
+rehydration with `X.from()` was added in 0.5.0.
 
 **Before (0.3):**
 
