@@ -20,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Exact data per kind: `errorSet(name, { kind: [keys] })` (audit A14, TASK-068).** The object form declares each kind's data keys (`{ not_found: ["id"], suspended: ["id", "reason"] }`); kind guards then narrow `data` to exactly `Pick<T, keys>` instead of `Partial<T>`, so no `!` is needed. Errors of a declared kind carry exactly the declared keys, taken from the entity (which must provide all of them), even when the template uses fewer; template holes are limited to declared keys; a kind declared with `[]` creates no-context errors; `init<T>()` requires `T` to have every declared key; `from()` rejects data missing a declared key. Reserved names are rejected as in the array form. The array form is unchanged. New exported types: `KindKeys`, `KindData`, `DeclaredKeys`, `NoReservedKeys`.
 
+### Changed
+
+- **Lossless message interpolation (audit A15, TASK-069).** Template values used to be rendered with `String(value ?? "")`, so objects became `[object Object]` and `null`/`undefined` became empty strings. Messages now render strings as-is, `null`/`undefined` literally, bigints with an `n` suffix (`10n`), dates as ISO strings (`Invalid Date` for invalid ones), errors and objects with their own `toString` (`URL`, errorset errors, custom classes) through it, functions as `[Function: name]`, and other objects and arrays as cycle-safe JSON (`"[Circular]"` for cycles only, truncated to 200 characters with `…`). `data` keeps the original values. Message text changes for those value types; code that matches exact messages built from them must expect the new text. No per-set `format` hook: formatting beyond this belongs to the logger.
+
 ### Fixed
 
 - **`init<T>()` accepts `interface` entity types (audit A13, TASK-066).** The entity constraint was `T extends Record<string, unknown>`, which interfaces don't satisfy (no implicit index signature), so `init<Account>()` failed with TS2344. Entity types and `Err`'s `Data` parameter are now constrained to `object`; template keys are still `keyof T & string`, bad keys still fail to compile, and type aliases behave as before.

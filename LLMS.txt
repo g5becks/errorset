@@ -221,6 +221,12 @@ err.data;    // { id: "123" } — only referenced fields
 
 This is the key insight: template holes aren't just for interpolation. They tell errorset which fields matter for this error, and those fields are automatically extracted into `err.data`.
 
+Values are rendered into the message without losing information: strings as-is, `null` and
+`undefined` literally, bigints as `10n`, dates as ISO strings, errors and objects with their own
+`toString` (such as `URL`) through it, functions by name, and other objects and arrays as JSON
+(cycles become `"[Circular]"`, and the JSON is cut to 200 characters). `err.data` always keeps
+the original values.
+
 ### Simplified Syntax for No-Context Errors
 
 When your error message doesn't need any context data, use the template literal directly:
