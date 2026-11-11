@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Breaking changes
 
+Upgrading from 0.3? Follow the [0.3 → 0.4 migration guide](docs/migration-0.4.md): before/after code for every entry below, and steps to audit guards where several sets share a kind name.
+
 - **Internal helpers removed from the public entry (audit C1).** `createKindFunction`, `createSetGuard` and `createSetGuardWithKinds`, deprecated in 0.3.1, are no longer exported. There is no `./internal` subpath: everything they did is available through `errorSet(name, kinds).init<T>()` and `merge()`.
   *Migration:* build sets with `errorSet(name, kinds).init<T>()`, and combine guards with `merge()` or `Set.merge()`.
 - **Errors are immutable (audit A8).** Every error and its `data` object are frozen at creation (a shallow freeze: values nested inside `data` keep their own mutability, and the entity you pass in is not frozen). Writing, adding or deleting fields throws a `TypeError` in strict mode (all ES modules) and fails silently in sloppy scripts; before, `err.message = "changed"` succeeded despite the `readonly` types. `.with()` and `capture` derive new frozen errors instead of mutating. No-context errors share one frozen empty `data` object.

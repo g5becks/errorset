@@ -1,9 +1,11 @@
 ---
 id: TASK-064
 title: 'Release prep: v0.4.0 (verify, changelog, tag, tarball; maintainer publishes)'
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@claude'
 created_date: '2026-11-10T17:35:00Z'
+updated_date: '2026-11-11T02:52:00Z'
 labels:
   - release
 milestone: m-1
@@ -35,3 +37,13 @@ Release prep for v0.4.0 (breaking).
 - [ ] #3 release:prepare 0.4.0 produced commit, tag, ci-local PASS on tag and branch, verified tarball, SHA-512 and RELEASE_NOTES.md
 - [ ] #4 Release PR merged without squash and tag pushed (if authorized); publish commands in notes
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Verify all other m-1 tasks Done (060 AC #3 is the not-applicable branch of a conditional) and only A5/A9 remain test.failing.
+2. CHANGELOG: add a migration-guide link at the top of [Unreleased] > Breaking changes; commit.
+3. bun run release:prepare 0.4.0 on release/v0.4.0 (commit, annotated tag, ci-local on tag, worktree build/pack/validate/SHA512SUMS/consumer smoke/RELEASE_NOTES).
+4. ci-local on the branch head; push branch; PR with CHANGELOG section + task IDs; comment with both ci-local tables; merge --merge; pull main; verify tag ancestor of main; push tag.
+5. Notes with tarball path, SHA-512 and maintainer publish commands; Done; commit on main; push main; create release/v0.5.0.
+<!-- SECTION:PLAN:END -->
