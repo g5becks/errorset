@@ -1,3 +1,14 @@
+---
+id: doc-002
+title: ERROR_HANDLING_DESIGN (historical)
+type: other
+created_date: '2026-11-11T02:38:00Z'
+updated_date: '2026-11-11T02:38:00Z'
+tags:
+  - history
+---
+> **Historical.** This is the original design document for errorset (moved from the repository root `ERROR_HANDLING_DESIGN.md` in TASK-063). It describes the pre-0.4 API, including behavior that 0.4.0 changed or removed (kind-only guard matching, the callable no-context form, the `format`/`colors` options, errorset-only causes, mutable errors). The current documentation is README.md, docs/migration-0.4.md and the generated LLMS.txt.
+
 # Error Sets for TypeScript
 
 > Domain-bound, type-safe error handling inspired by Zig.

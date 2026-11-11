@@ -13,6 +13,7 @@ import {
   type HasDuplicates,
   isErr,
   type KindFunction,
+  type NoContextErr,
   type NoDuplicates,
 } from "../../src/index.ts"
 
@@ -77,7 +78,7 @@ expectTypeOf(OrderError.kinds).toExtend<readonly string[]>()
 // Builder API with config
 const VerboseError = errorSet("VerboseError", ["error"]).init<User>({
   includeStack: true,
-  format: "pretty",
+  includeTimestamp: true,
 })
 
 expectTypeOf(VerboseError({} as unknown)).toEqualTypeOf<boolean>()
@@ -114,9 +115,8 @@ declare const mockErr: Err<"not_found", { id: string }>
 expectTypeOf(mockErr.kind).toEqualTypeOf<"not_found">()
 expectTypeOf(mockErr.message).toEqualTypeOf<string>()
 expectTypeOf(mockErr.data).toEqualTypeOf<{ id: string }>()
-expectTypeOf(mockErr.cause).toExtend<
-  Err<string, Record<string, unknown>> | undefined
->()
+// ES2022 cause semantics (0.4.0): any value, narrowed by the caller
+expectTypeOf(mockErr.cause).toEqualTypeOf<unknown>()
 
 // =============================================================================
 // isErr universal guard
@@ -134,7 +134,10 @@ if (isErr(unknownValue)) {
 // Set-level guard type narrowing
 // =============================================================================
 
-type GetUserResult = User | Err<"not_found" | "suspended", Partial<User>>
+// Errors carry their set name; a result type names the set it comes from (0.4.0)
+type GetUserResult =
+  | User
+  | Err<"not_found" | "suspended", Partial<User>, "UserError">
 declare const userResult: GetUserResult
 
 if (UserError(userResult)) {
@@ -223,7 +226,6 @@ expectTypeOf(capturedAsync).toExtend<
 
 const config: ErrorSetConfig = {
   includeStack: true,
-  format: "json",
   stackDepth: 10,
 }
 
@@ -233,14 +235,18 @@ expectTypeOf(config).toExtend<Partial<Config>>()
 // configure function
 // =============================================================================
 
-// configure should accept partial config
-configure({ format: "json" })
+// configure accepts partial config and returns a disposer
 configure({ includeStack: true, stackDepth: 5 })
-configure({ format: "pretty", colors: true })
+const restoreConfig = configure({ includeTimestamp: true })
+expectTypeOf(restoreConfig).toEqualTypeOf<() => void>()
 
-// Invalid format should error
-// @ts-expect-error - 'invalid' is not a valid format
-configure({ format: "invalid" })
+// format and colors were removed in 0.4.0
+// @ts-expect-error - format no longer exists
+configure({ format: "json" })
+// @ts-expect-error - colors no longer exists
+configure({ colors: true })
+// @ts-expect-error - format no longer exists in per-set config either
+errorSet("RemovedFormat", ["a"]).init({ format: "pretty" })
 
 // =============================================================================
 // Iteration support
@@ -338,36 +344,159 @@ errorSet("BadError3", ["x", "x"])
 errorSet("BadError4", ["a", "b", "c", "b"])
 
 // =============================================================================
-// CallableErr - Simplified syntax for no-context errors
+// NoContextErr - templates without holes return a plain error object (0.4.0)
 // =============================================================================
 
-// No template holes should return CallableErr (usable directly)
-const callableErr = UserError.invalid`Simple error message`
+// No template holes: a plain error object, usable directly
+const noContextErr = UserError.invalid`Simple error message`
+expectTypeOf(noContextErr).toEqualTypeOf<NoContextErr<"invalid", "UserError">>()
+expectTypeOf(noContextErr).toExtend<
+  Err<"invalid", Record<string, never>, "UserError">
+>()
 
-// CallableErr should be assignable to Err
-expectTypeOf(callableErr).toExtend<Err<"invalid", Record<string, never>>>()
-
-// CallableErr should be callable with options
-const withCause = callableErr({
+// Options (cause) go through with(), which returns a new error of the same kind
+const withCause = noContextErr.with({
   cause: UserError.not_found`Cause ${"id"}`({ id: "1" }),
 })
-expectTypeOf(withCause).toExtend<Err<"invalid", Record<string, never>>>()
+expectTypeOf(withCause).toEqualTypeOf<NoContextErr<"invalid", "UserError">>()
 
-// CallableErr should have error properties
-expectTypeOf(callableErr.kind).toEqualTypeOf<"invalid">()
-expectTypeOf(callableErr.message).toEqualTypeOf<string>()
-expectTypeOf(callableErr.data).toEqualTypeOf<Record<string, never>>()
+// It is no longer callable
+// @ts-expect-error - no-context errors are objects, not functions, since 0.4.0
+noContextErr({ cause: "x" })
 
-// isErr should work on CallableErr
-expectTypeOf(isErr(callableErr)).toEqualTypeOf<boolean>()
+// It has the error properties
+expectTypeOf(noContextErr.kind).toEqualTypeOf<"invalid">()
+expectTypeOf(noContextErr.message).toEqualTypeOf<string>()
+expectTypeOf(noContextErr.data).toEqualTypeOf<Record<string, never>>()
 
-// Set-level guard should work on CallableErr
-expectTypeOf(UserError(callableErr)).toEqualTypeOf<boolean>()
-
-// Kind-level guard should work on CallableErr
-expectTypeOf(UserError.invalid(callableErr)).toEqualTypeOf<boolean>()
+// Guards accept it
+expectTypeOf(isErr(noContextErr)).toEqualTypeOf<boolean>()
+expectTypeOf(UserError(noContextErr)).toEqualTypeOf<boolean>()
+expectTypeOf(UserError.invalid(noContextErr)).toEqualTypeOf<boolean>()
 
 // With template holes should still return ErrorCreator (requires entity data)
 const withHoles = UserError.not_found`User ${"id"} not found`({ id: "123" })
 expectTypeOf(withHoles.kind).toEqualTypeOf<"not_found">()
 expectTypeOf(withHoles.data).toEqualTypeOf<{ id: string }>()
+
+// =============================================================================
+// Set identity (0.4.0, audit A1): errors carry their set, guards are set-precise
+// =============================================================================
+
+type Position = { symbol: string }
+const OrderErrors = errorSet("OrderError", [
+  "invalid_symbol",
+  "rejected",
+]).init<Position>()
+const PositionErrors = errorSet("PositionError", [
+  "invalid_symbol",
+  "fetch_failed",
+]).init<Position>()
+type OrderErrors = typeof OrderErrors.Type
+type PositionErrors = typeof PositionErrors.Type
+
+const orderErr = OrderErrors.invalid_symbol`bad ${"symbol"}`({ symbol: "X" })
+expectTypeOf(orderErr.set).toEqualTypeOf<"OrderError">()
+expectTypeOf(OrderErrors.rejected`static`.set).toEqualTypeOf<"OrderError">()
+expectTypeOf<OrderErrors["set"]>().toEqualTypeOf<"OrderError">()
+
+declare const either: OrderErrors | PositionErrors
+if (OrderErrors(either)) {
+  // A same-kind error from another set does not narrow into OrderError
+  expectTypeOf(either).toEqualTypeOf<OrderErrors>()
+  expectTypeOf(either.set).toEqualTypeOf<"OrderError">()
+}
+if (OrderErrors.invalid_symbol(either)) {
+  expectTypeOf(either.set).toEqualTypeOf<"OrderError">()
+  expectTypeOf(either.kind).toEqualTypeOf<"invalid_symbol">()
+}
+if (PositionErrors.invalid_symbol(either)) {
+  expectTypeOf(either.set).toEqualTypeOf<"PositionError">()
+}
+
+// An Err from another set is not accepted where a set's errors are expected
+// @ts-expect-error - PositionError's error is not an OrderError
+const wrongSet: OrderErrors = PositionErrors.invalid_symbol`bad ${"symbol"}`({
+  symbol: "X",
+})
+expectTypeOf(wrongSet).not.toBeAny()
+
+// merge keeps both set names
+const Merged = OrderErrors.merge(PositionErrors)
+if (Merged(either)) {
+  expectTypeOf(either.set).toEqualTypeOf<"OrderError" | "PositionError">()
+}
+
+// =============================================================================
+// Exhaustive recover (0.4.0, audit A10)
+// =============================================================================
+
+const Payment = errorSet("PaymentError", [
+  "declined",
+  "expired",
+  "fraud",
+]).init<{ id: string }>()
+declare const payment: string | typeof Payment.Type
+
+// Every kind handled: compiles; result is the success type or the handlers' type
+const recoveredAll = Payment.recover(payment, {
+  declined: () => "d",
+  expired: () => "e",
+  fraud: () => "f",
+})
+expectTypeOf(recoveredAll).toEqualTypeOf<string>()
+
+// Partial map plus the "_" catch-all: compiles
+const recoveredPartial = Payment.recover(payment, {
+  declined: () => 1,
+  _: () => 0,
+})
+expectTypeOf(recoveredPartial).toEqualTypeOf<string | number>()
+
+// Catch-all only: compiles
+expectTypeOf(Payment.recover(payment, { _: () => null })).toEqualTypeOf<
+  string | null
+>()
+
+// Every kind plus "_": compiles
+expectTypeOf(
+  Payment.recover(payment, {
+    declined: () => "d",
+    expired: () => "e",
+    fraud: () => "f",
+    _: () => "x",
+  })
+).toEqualTypeOf<string>()
+
+// @ts-expect-error - {} handles nothing
+Payment.recover(payment, {})
+
+// @ts-expect-error - a partial map without "_" is not exhaustive
+Payment.recover(payment, { declined: () => "d", expired: () => "e" })
+
+Payment.recover(payment, {
+  declined: () => "d",
+  expired: () => "e",
+  fraud: () => "f",
+  // @ts-expect-error - "refunded" is not a PaymentError kind
+  refunded: () => "r",
+})
+
+Payment.recover(payment, {
+  _: () => "x",
+  // @ts-expect-error - unknown kind keys are rejected next to "_" too
+  chargeback: () => "c",
+})
+
+// =============================================================================
+// cause accepts any value (0.4.0, audit A6): native Errors type-check
+// =============================================================================
+
+const withNativeCause = UserError.not_found`User ${"id"} not found`(
+  { id: "1" },
+  { cause: new TypeError("socket hang up") }
+)
+expectTypeOf(withNativeCause.cause).toEqualTypeOf<unknown>()
+expectTypeOf(
+  UserError.invalid`Invalid`.with({ cause: "plain value" })
+).toExtend<Err<"invalid", Record<string, never>, "UserError">>()

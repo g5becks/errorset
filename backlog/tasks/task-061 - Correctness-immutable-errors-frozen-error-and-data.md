@@ -1,12 +1,12 @@
 ---
 id: TASK-061
 title: 'Correctness: immutable errors (frozen error and data)'
-status: To Do
-assignee: []
+status: Done
+assignee:
+  - '@claude'
 created_date: '2026-11-10T17:35:00Z'
-labels:
-  - correctness
-  - breaking
+updated_date: '2026-11-11T02:34:00Z'
+labels: []
 milestone: m-1
 dependencies:
   - TASK-055
@@ -32,8 +32,38 @@ type: bug
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Errors and their data are frozen; writes throw (tests); A8 regression case passes
-- [ ] #2 Creation overhead from freezing is < 10% vs the recorded baseline (numbers in notes)
-- [ ] #3 CHANGELOG.md lists the change under ## [Unreleased] > ### Breaking changes with migration steps
-- [ ] #4 bash scripts/ci-local.sh HEAD prints RESULT: PASS
+- [x] #1 Errors and their data are frozen; writes throw (tests); A8 regression case passes
+- [x] #2 Freezing adds at most 2 freezes per error, ≤ 20 ns per error on the reference machine, measured with and without freezing on the same commit (5 runs each).
+- [x] #3 CHANGELOG.md lists the change under ## [Unreleased] > ### Breaking changes with migration steps
+- [x] #4 bash scripts/ci-local.sh HEAD prints RESULT: PASS
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Freeze every error at creation after creation options are applied (Object.freeze(err)) and its data shallowly (Object.freeze(data)), for template and no-context errors; capture's cause-attaching copy is frozen too (data is already frozen and shared).
+2. Tests: writes to message, data fields, new keys and deletes throw TypeError (ES modules are strict); with()/capture still work on frozen errors; flip both A8 cases.
+3. Benchmark A/B on the same code with and without freezing (bench --runs 3); criterion: freeze overhead < 10% of the 0.3.0 baseline creation time (107.4 ns -> < 10.7 ns); record numbers.
+4. CHANGELOG breaking; docs; gate; ci-local.
+<!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+- STATUS: BLOCKED on AC #2 (performance budget); implementation committed at 5774129, all other checks pass. Needs a maintainer decision (options below).
+- Outcome: every error (template, no-context, with(), capture copy) is Object.freeze()d after creation options are applied; template data is shallow-frozen; no-context errors share one frozen EMPTY_DATA object. Writes/adds throw TypeError (strict-mode ESM), Reflect.deleteProperty returns false; timestamp/stack are frozen too; nested values inside data and the caller's entity are not frozen. Both A8 regression cases flipped to test; tests/immutability.test.ts (7 tests). 227 tests, 100% coverage; 2 test.failing remain (A5, A9: both v0.5.0). Gate passes. CHANGELOG breaking entry added.
+- Measurements (Bun 1.4.4, Apple M5; interleaved A/B, 5 child processes per side, same code with and without the freeze calls; budget = 10% of bench/baseline-0.3.0.json):
+  - create_template_2keys: 161.8 -> 176.8 ns, freeze delta 14.5 ns = 13.5% of the 107.4 ns baseline (9.0% of the current pre-freeze time). OVER the 10.7 ns budget.
+  - create_callable_no_context: 138.8 -> 146.3 ns, delta 7.3 ns = 6.0% of the 121.6 ns baseline. Within budget (after sharing a frozen empty data object; first attempt was +15.3 ns = 12.6%).
+- Attempts: (1) plain freeze of error + data: +13.8/+15.3 ns; (2) shared frozen EMPTY_DATA for no-context errors: fixes no-context, template unchanged; (3) moving the per-error [INSPECT] closure into shared descriptors was reverted because existing tests call the inspect hook detached (no `this`). A standalone probe shows Object.freeze costs about 6-9 ns per object regardless of own-property count (5 own: +6.2, 8 own: +6.3, methods on a prototype: +5.8), so a template error (error + data = 2 objects) has a floor of about 12-15 ns. The audit's premise ("freezing is typically a few ns") does not hold, and TASK-071's shared prototype would not fix it.
+- Options for the maintainer: (a) accept ~+14 ns (13.5% of the old baseline, 9% of current creation) and relax AC #2; (b) freeze only the error, not data (meets the budget but A8 data writes would succeed: conflicts with AC #1); (c) freeze only in development (e.g. NODE_ENV !== "production"): meets the production budget but behavior differs by environment; (d) defer freezing to a later release. Recommendation: (a): immutability is the point of A8 and the absolute cost is ~14 ns per error.
+- Per the run rules, v0.4.0 is not released while this task is blocked.
+
+- ci-local: the freeze commit is covered by Verified with scripts/ci-local.sh (5e4d353, PASS); AC #4 is not checked while the task is blocked (it must be re-run after the maintainer's decision lands).
+
+- Budget relaxed by maintainer decision 2026-11-10; original 10% assumed freezing costs a few ns, measured ~6–9 ns per freeze.
+- Maintainer chose option (a): keep freezing both the error and its data and accept the measured cost. AC #2 rewritten to the maintainer's wording and checked with the existing measurements: template errors 2 freezes, +14.5 ns; no-context errors 1 freeze (shared frozen EMPTY_DATA), +7.3 ns; both ≤ 20 ns (Bun 1.4.4, Apple M5, interleaved A/B on the same code, 5 runs each). Label 'blocked' removed.
+- CHANGELOG: added an [Unreleased] > ### Changed entry (frozen errors and data, strict-mode TypeError, measured cost); the breaking entry now points to it instead of 'pending a maintainer decision'.
+
+- Verified with scripts/ci-local.sh (74c1545, PASS); GitHub Actions unavailable (billing lock). Closed after the maintainer decision.
+<!-- SECTION:NOTES:END -->

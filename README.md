@@ -73,7 +73,15 @@ bun add @takinprofit/errorset
 npm install @takinprofit/errorset
 ```
 
-Requires TypeScript 5+.
+Requires Bun ≥ 1.3.14 or Node.js ≥ 22 (ES modules and `require()`). Types are checked against
+TypeScript 5.9, 6.0 and 7.0; there is no TypeScript peer dependency.
+
+### Upgrading from 0.3
+
+0.4.0 is a breaking release: guards check which set an error came from, errors are frozen,
+no-context errors are plain objects, `recover` is exhaustive, and `cause` accepts any value.
+Follow the [migration guide](docs/migration-0.4.md), which has before/after code for every
+change and steps to audit code where several sets share a kind name.
 
 ---
 
@@ -151,6 +159,20 @@ const BadError = errorSet("BadError", ["not_found", "invalid", "not_found"])
 
 This prevents subtle bugs where duplicate kinds could cause property collisions or unexpected behavior.
 
+### Reserved Kind Names
+
+Kinds become properties of the error set, so a few names are reserved: the set's own members
+(`recover`, `inspect`, `merge`, `capture`, `captureAsync`, `kinds`, `Type`, and `from`), the `_`
+catch-all key of `recover`, and the names every JavaScript function inherits (`name`, `length`,
+`call`, `apply`, `bind`, `constructor`, `toString`, `valueOf`, `__proto__`, …). The full list is
+exported as `RESERVED_KINDS`. A reserved name fails to compile and throws a clear error at runtime:
+
+```typescript
+errorSet("JobError", ["recover", "timeout"]);
+// ❌ Type error: '"recover" is a reserved kind name in errorset; rename the kind'
+// Runtime (untyped callers): Error: "recover" is a reserved kind name in errorset; rename the kind
+```
+
 ---
 
 ## Creating Errors
@@ -173,20 +195,21 @@ This is the key insight: template holes aren't just for interpolation. They tell
 
 ### Simplified Syntax for No-Context Errors
 
-When your error message doesn't need any context data, you can use the template literal directly without calling it:
+When your error message doesn't need any context data, use the template literal directly:
 
 ```typescript
-// No template holes — use directly without ({})
+// No template holes — the template itself is the error
 return UserError.invalid`Invalid user data`;
 
-// This is cleaner than the old syntax:
-// return UserError.invalid`Invalid user data`({});  // No longer needed!
-
-// You can still add a cause if needed:
-return UserError.invalid`Invalid user data`({ cause: previousError });
+// Add a cause with .with(): returns a new error, the original is unchanged
+return UserError.invalid`Invalid user data`.with({ cause: previousError });
 ```
 
-This works because errors without template holes return a `CallableErr` — an object that is both an error value AND a function. You can use it directly as an error, or call it with `{ cause }` to chain errors.
+Errors without template holes are plain error objects (`NoContextErr`), like every other error:
+they serialize with `JSON.stringify` and can be sent through `structuredClone`, `postMessage`
+and worker or IPC boundaries. A structured clone carries the data (`set`, `kind`, `message`,
+`data`, `cause`) but not the brand symbol, so guards don't recognize the clone; rehydration
+with `from()` is planned for 0.5.0.
 
 ### Error Chaining
 
@@ -199,15 +222,35 @@ if (DbError(dbResult)) {
 }
 ```
 
-Access the chain via `result.cause`:
+`cause` follows ES2022 `Error.cause`: it accepts any value (another errorset error, a native
+`Error`, anything thrown) and is typed `unknown`, so narrow it before use:
 
 ```typescript
-if (ServiceError(result)) {
-  console.log(result.kind);          // "processing_failed"
-  console.log(result.cause?.kind);   // "not_found"
-  console.log(result.cause?.data);   // { id: "user1" }
+if (ServiceError(result) && UserError(result.cause)) {
+  console.log(result.kind);        // "processing_failed"
+  console.log(result.cause.kind);  // "not_found"
+  console.log(result.cause.data);  // { id: "user1" }
 }
+
+// Native errors work too
+return DbError.unavailable`Database unavailable`.with({ cause: new Error("ECONNREFUSED") });
 ```
+
+### Immutability
+
+Errors are frozen when they are created, and so is their `data` object. Assigning to, adding
+or deleting a field throws a `TypeError` in strict mode (every ES module and class body):
+
+```typescript
+const err = UserError.not_found`User ${"id"} not found`({ id: "abc123" });
+err.message = "changed"; // TypeError (read-only property)
+err.data.id = "changed"; // TypeError (read-only property)
+```
+
+To change an error, create a new one; `.with()` and `capture` also return new errors. The
+freeze is shallow: objects nested inside `data` keep their own mutability, and the entity you
+pass in is never frozen. Freezing costs a few nanoseconds per object (about 15 ns per
+template error on the reference machine).
 
 ---
 
@@ -229,6 +272,32 @@ if (UserError(result)) {
 // After guard, TypeScript knows it's User
 console.log(result.name);
 ```
+
+### Set Identity
+
+Every error records the set that created it in a `set` field (`err.set === "UserError"`), and
+set guards, kind guards, `instanceof`, `recover`, `inspect` and merged guards all check it. Two
+sets that share a kind name never match each other's errors:
+
+```typescript
+const OrderError = errorSet("OrderError", ["invalid_symbol", "rejected"]).init<Order>();
+const PositionError = errorSet("PositionError", ["invalid_symbol", "fetch_failed"]).init<Position>();
+
+const err = PositionError.invalid_symbol`Bad symbol ${"symbol"}`({ symbol: "XYZ" });
+OrderError(err);                // false
+OrderError.invalid_symbol(err); // false
+PositionError(err);             // true
+```
+
+The set name is part of the type too (`Err<Kind, Data, SetName>`), so narrowing a union of
+`OrderError | PositionError` with `OrderError(value)` leaves only `OrderError`. When you write an
+error type by hand, include the set name or use `typeof UserError.Type`.
+
+**Set names must be unique.** Errors are matched by set name, not by object identity, which is
+what lets separately bundled copies recognize each other. Defining the same name again with the
+same kinds is fine (hot reload, tests); defining it with different kinds logs a one-time
+`console.warn`, because those sets would accept each other's errors for the kinds they share.
+Namespaced names such as `"billing/PaymentError"` avoid collisions.
 
 ### `instanceof` Syntax
 
@@ -269,6 +338,19 @@ if (isErr(result)) {
   console.log(result.kind, result.message);
 }
 ```
+
+### Across Copies and Versions
+
+Errors are recognized by a brand stored under the registry symbol
+`Symbol.for("@takinprofit/errorset/err")` (exported as `ERR`), not by object identity or
+prototypes. Every copy of errorset loaded in the same process shares that symbol, so an
+error created by a separately bundled plugin, a duplicate install or another version passes
+`isErr` and the set and kind guards of your copy.
+
+The brand's value is a protocol number (`ERR_PROTOCOL`, currently `1`). Guards accept the
+protocols they understand, so copies with the same protocol interoperate; a future
+incompatible error shape will bump it. Brand checks do not survive serialization:
+`JSON.parse(JSON.stringify(err))` is plain data.
 
 ---
 
@@ -318,6 +400,11 @@ const user = UserError.recover(result, {
   _: () => guestUser,
 });
 ```
+
+Recovery is exhaustive and checked by the compiler: handle every kind of the set, or handle
+some kinds and add the `_` catch-all. `recover(result, {})`, a partial map without `_`, and
+unknown kind keys are type errors, so `recover` never throws from typed code. (Untyped callers
+that skip both get a clear runtime error naming the set and kind.)
 
 ### `inspect` — Side Effects Only
 
@@ -409,9 +496,16 @@ const result = DbError.capture(
 );
 
 if (DbError(result)) {
-  console.log(result.kind);  // "query_failed"
+  console.log(result.kind);   // "query_failed"
+  console.log(result.cause);  // the original exception, with its stack, code, errno...
 }
 ```
+
+The caught value is attached as `cause` unless your mapper sets one, so nothing about the
+original failure is lost. The mapper always receives an `Error`: anything else that was thrown
+(a string, a plain object) is wrapped in an `Error` whose message renders it readably (strings
+as-is, objects as JSON), while `cause` keeps the original value. In JSON output a native `Error`
+cause becomes `{ name, message, code? }`, without its stack.
 
 ### `captureAsync` — Wrap Async Code
 
@@ -421,6 +515,9 @@ const result = await DbError.captureAsync(
   (e) => DbError.query_failed`Query failed: ${"message"}`({ sql, message: e.message })
 );
 ```
+
+Rejections and synchronous throws inside the async function are handled the same way, with the
+original value attached as `cause`.
 
 ---
 
@@ -446,9 +543,25 @@ configure(
 The same options can be passed per set to `.init<T>(config)`; per-set values override the
 global ones. When `includeTimestamp` is off, errors have no `timestamp` property at all.
 
-> **Deprecated:** `format` and `colors` are still accepted but have no effect, and they are
-> removed in 0.4.0. Format errors in your logger instead, using `JSON.stringify(err)` or
-> `String(err)` (see [Serialization and Logging](#serialization-and-logging)).
+**`configure()` is for applications.** It changes the defaults of every error set in the
+process, including sets defined by libraries you depend on. If you publish a library, pass
+options to your own sets with `.init<T>(config)` and never call `configure()`.
+
+`configure()` returns a function that restores the previous configuration, which keeps tests
+isolated:
+
+```typescript
+const restore = configure({ includeTimestamp: true });
+try {
+  // ...
+} finally {
+  restore();
+}
+```
+
+Formatting is your logger's job: use `JSON.stringify(err)` or `String(err)` (see
+[Serialization and Logging](#serialization-and-logging)). The `format` and `colors` options,
+which never had an effect, were removed in 0.4.0.
 
 Stack traces are disabled by default because error sets represent *expected* failures, not bugs. Enable them during development if you need to trace where errors originate.
 
@@ -461,29 +574,28 @@ Errors have custom `console.log` output:
 ```typescript
 const err = UserError.not_found`User ${"id"} not found`({ id: "abc123" });
 console.log(err);
-// Output: UserError.not_found { id: "abc123" }
+// Output: UserError.not_found {"id":"abc123"}
 ```
 
 ## Serialization and Logging
 
-Both error shapes, including the no-context form (which is a function), serialize to
-plain JSON, so errors survive structured logs and HTTP responses:
+Errors serialize to plain JSON, so they survive structured logs and HTTP responses:
 
 ```typescript
 const err = UserError.not_found`User ${"id"} not found`({ id: "abc123" });
 
 JSON.stringify(err);
-// {"kind":"not_found","message":"User abc123 not found","data":{"id":"abc123"}}
+// {"set":"UserError","kind":"not_found","message":"User abc123 not found","data":{"id":"abc123"}}
 
 JSON.stringify({ error: UserError.invalid`Invalid user data` });
-// {"error":{"kind":"invalid","message":"Invalid user data","data":{}}}
+// {"error":{"set":"UserError","kind":"invalid","message":"Invalid user data","data":{}}}
 
 String(err);  // "UserError.not_found: User abc123 not found"
 `${err}`;     // same
 ```
 
-The JSON shape is `{ kind, message, data, cause? }`. A `cause` that is an errorset error
-serializes the same way, recursively; a native `Error` cause becomes `{ name, message }`.
+The JSON shape is `{ set, kind, message, data, cause?, timestamp? }`. A `cause` that is an errorset error
+serializes the same way, recursively; a native `Error` cause becomes `{ name, message, code? }`.
 `toJSON` and `toString` are non-enumerable, so `Object.keys(err)` and spreading are
 unchanged. Stack traces are not included in the JSON output.
 
@@ -497,9 +609,10 @@ unchanged. Stack traces are not included in the JSON output.
 | `errorSet(name, kinds).init<T>(config)` | Define with per-instance config |
 | `type X = typeof X.Type` | Type-value identity |
 | `Set.kind\`msg\`` | Create error (no context) |
-| `Set.kind\`msg\`({ cause })` | Create with cause (no context) |
+| `Set.kind\`msg\`.with({ cause })` | Create with cause (no context) |
 | `Set.kind\`msg ${"field"}\`(data)` | Create error with context |
 | `Set.kind\`msg ${"field"}\`(data, { cause })` | Create with context and cause |
+| `err.set` / `err.kind` | Set name / kind of an error |
 | `Set(value)` | Set-level guard |
 | `value instanceof Set` | Alternative guard |
 | `Set.kind(value)` | Kind-level guard |
@@ -509,9 +622,12 @@ unchanged. Stack traces are not included in the JSON output.
 | `Set.merge(other)` | Combine sets |
 | `Set.capture(fn, map)` | Wrap sync code |
 | `Set.captureAsync(fn, map)` | Wrap async code |
-| `[...Set]` | Iterate kinds |
+| `[...Set]` / `Set.kinds` | Iterate / list kinds |
 | `JSON.stringify(err)` / `String(err)` | Serialize / format an error |
-| `configure(options)` | Set global options |
+| `configure(options)` | Set global options (returns a restore function) |
+| `ERR`, `ERR_PROTOCOL` | Brand symbol and protocol number |
+| `RESERVED_KINDS` | Kind names that can't be used |
+
 ---
 
 ## Philosophy

@@ -4,7 +4,8 @@
 #
 # Runs the same jobs against a clean clone of a git ref (default: HEAD):
 #   check:      {linux (Docker oven/bun), macOS (host)} x {Bun 1.3.14, 1.4.4, latest}
-#               frozen install, lint, typecheck, test --coverage, build, test:types,
+#               frozen install, lint, LLMS.txt freshness (docs:llms + git diff),
+#               typecheck, test --coverage, build, test:types,
 #               test:consumer (SMOKE_NODE=skip)
 #   typescript: linux, Bun 1.4.4, tsc on source + type tests for TS 5.9.3, 6.0.3, 7.0.2
 #               (7.1.0-beta is advisory and never fails the run)
@@ -74,6 +75,7 @@ printf "#!/bin/sh\nexec bunx \"\$@\"\n" > /usr/local/bin/npx && chmod +x /usr/lo
 CHECK_STEPS='set -e
 bun install --frozen-lockfile
 bun run lint
+bun run docs:llms && git diff --exit-code LLMS.txt
 bun run typecheck
 bun test --coverage
 bun run build

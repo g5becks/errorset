@@ -4,15 +4,12 @@
  */
 
 import { describe, expect, it, mock } from "bun:test"
-import {
-  createSetGuardWithKinds,
-  type Err,
-  errorSet,
-  merge,
-} from "../src/index.ts"
+import { type Err, errorSet, merge } from "../src/index.ts"
+// Internal helper: not part of the public entry since 0.4.0
+import { createSetGuardWithKinds } from "../src/types.ts"
 
 // Pre-define regex at module level
-const noHandlerRegex = /No handler found for error kind: suspended/u
+const noHandlerRegex = /no handler for "UserError\.suspended"/u
 
 describe("recover Method", () => {
   type User = { id: string; name: string }
@@ -48,12 +45,12 @@ describe("recover Method", () => {
     expect(result).toEqual({ id: "default", name: "Default User" })
   })
 
-  it("should throw if no matching handler found", () => {
+  it("should throw if an untyped call has no matching handler", () => {
+    // Typed code cannot reach this: RecoverHandlers requires every kind or "_"
     const err = UserError.suspended`Account ${"id"} suspended`({ id: "123" })
+    const incomplete = { not_found: () => ({ id: "guest", name: "Guest" }) }
     expect(() => {
-      UserError.recover(err, {
-        not_found: () => ({ id: "guest", name: "Guest" }),
-      })
+      UserError.recover(err, incomplete as never)
     }).toThrow(noHandlerRegex)
   })
 
@@ -61,6 +58,7 @@ describe("recover Method", () => {
     const err = UserError.not_found`User ${"id"} not found`({ id: "123" })
     const result = UserError.recover(err, {
       not_found: e => ({ id: e.data.id ?? "unknown", name: "Recovered" }),
+      suspended: () => ({ id: "suspended", name: "Suspended" }),
     })
     expect(result).toEqual({ id: "123", name: "Recovered" })
   })

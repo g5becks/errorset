@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from "bun:test"
-import { type Err, errorSet } from "../src/index.ts"
+import { errorSet } from "../src/index.ts"
 
 type User = { id: string; name: string }
 
@@ -17,6 +17,7 @@ describe("toJSON", () => {
   it("serializes a template error to kind, message and data", () => {
     const err = UserError.not_found`User ${"id"} not found`({ id: "1" })
     expect(roundTrip(err)).toEqual({
+      set: "UserError",
       kind: "not_found",
       message: "User 1 not found",
       data: { id: "1" },
@@ -26,7 +27,7 @@ describe("toJSON", () => {
   it("serializes a callable no-context error instead of dropping it", () => {
     const err = UserError.invalid`Invalid user data`
     expect(JSON.stringify(err)).toBe(
-      '{"kind":"invalid","message":"Invalid user data","data":{}}'
+      '{"set":"UserError","kind":"invalid","message":"Invalid user data","data":{}}'
     )
   })
 
@@ -35,11 +36,17 @@ describe("toJSON", () => {
     const callable = UserError.invalid`Invalid user data`
     expect(roundTrip({ error: template, other: callable })).toEqual({
       error: {
+        set: "UserError",
         kind: "not_found",
         message: "User 1 not found",
         data: { id: "1" },
       },
-      other: { kind: "invalid", message: "Invalid user data", data: {} },
+      other: {
+        set: "UserError",
+        kind: "invalid",
+        message: "Invalid user data",
+        data: {},
+      },
     })
   })
 
@@ -52,25 +59,33 @@ describe("toJSON", () => {
       { id: "1" },
       { cause: db }
     )
-    const wrapped = UserError.invalid`Invalid user data`({
+    const wrapped = UserError.invalid`Invalid user data`.with({
       cause: callableCause,
     })
 
     expect(roundTrip(err)).toEqual({
+      set: "UserError",
       kind: "not_found",
       message: "User 1 not found",
       data: { id: "1" },
       cause: {
+        set: "DbError",
         kind: "timeout",
         message: "Query on users timed out",
         data: { table: "users" },
       },
     })
     expect(roundTrip(wrapped)).toEqual({
+      set: "UserError",
       kind: "invalid",
       message: "Invalid user data",
       data: {},
-      cause: { kind: "invalid", message: "Invalid user data", data: {} },
+      cause: {
+        set: "UserError",
+        kind: "invalid",
+        message: "Invalid user data",
+        data: {},
+      },
     })
   })
 
@@ -78,10 +93,10 @@ describe("toJSON", () => {
     const native = new TypeError("bad input")
     const err = UserError.not_found`User ${"id"} not found`(
       { id: "1" },
-      // A native Error cause is accepted at runtime; the type is widened in TASK-058
-      { cause: native as unknown as Err<string, Record<string, unknown>> }
+      { cause: native }
     )
     expect(roundTrip(err)).toEqual({
+      set: "UserError",
       kind: "not_found",
       message: "User 1 not found",
       data: { id: "1" },
@@ -90,8 +105,9 @@ describe("toJSON", () => {
   })
 
   it("serializes the error created by calling a callable error", () => {
-    const err = UserError.invalid`Invalid user data`()
+    const err = UserError.invalid`Invalid user data`.with({})
     expect(roundTrip(err)).toEqual({
+      set: "UserError",
       kind: "invalid",
       message: "Invalid user data",
       data: {},
@@ -109,7 +125,9 @@ describe("toString", () => {
   it("formats a callable error and its called form the same way", () => {
     const callable = UserError.invalid`Invalid user data`
     expect(String(callable)).toBe("UserError.invalid: Invalid user data")
-    expect(String(callable())).toBe("UserError.invalid: Invalid user data")
+    expect(String(callable.with({}))).toBe(
+      "UserError.invalid: Invalid user data"
+    )
   })
 })
 
@@ -117,11 +135,17 @@ describe("enumerability", () => {
   it("adds no enumerable keys to either shape", () => {
     const template = UserError.not_found`User ${"id"} not found`({ id: "1" })
     const callable = UserError.invalid`Invalid user data`
-    const called = callable({ cause: template })
+    const called = callable.with({ cause: template })
 
-    expect(Object.keys(template)).toEqual(["kind", "message", "data"])
-    expect(Object.keys(callable)).toEqual(["kind", "message", "data"])
-    expect(Object.keys(called)).toEqual(["kind", "message", "data", "cause"])
+    expect(Object.keys(template)).toEqual(["set", "kind", "message", "data"])
+    expect(Object.keys(callable)).toEqual(["set", "kind", "message", "data"])
+    expect(Object.keys(called)).toEqual([
+      "set",
+      "kind",
+      "message",
+      "data",
+      "cause",
+    ])
     for (const err of [template, callable, called]) {
       expect(Object.getOwnPropertyDescriptor(err, "toJSON")?.enumerable).toBe(
         false

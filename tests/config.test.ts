@@ -12,22 +12,17 @@ describe("Configuration System", () => {
   })
 
   describe("getConfig", () => {
-    it("should return default configuration", () => {
+    it("should return default configuration with only the supported options", () => {
       const config = getConfig()
-      expect(config.format).toBe("pretty")
-      expect(config.includeStack).toBe(false)
-      expect(config.includeTimestamp).toBe(false)
-      expect(config.colors).toBe(true)
-      expect(config.stackDepth).toBe(10)
+      expect(config).toEqual({
+        includeStack: false,
+        includeTimestamp: false,
+        stackDepth: 10,
+      })
     })
   })
 
   describe("configure", () => {
-    it("should update format option", () => {
-      configure({ format: "json" })
-      expect(getConfig().format).toBe("json")
-    })
-
     it("should update includeStack option", () => {
       configure({ includeStack: true })
       expect(getConfig().includeStack).toBe(true)
@@ -38,65 +33,101 @@ describe("Configuration System", () => {
       expect(getConfig().includeTimestamp).toBe(true)
     })
 
-    it("should update colors option", () => {
-      configure({ colors: false })
-      expect(getConfig().colors).toBe(false)
-    })
-
     it("should update stackDepth option", () => {
       configure({ stackDepth: 20 })
       expect(getConfig().stackDepth).toBe(20)
     })
 
     it("should merge partial configuration", () => {
-      configure({ format: "minimal", colors: false })
+      configure({ includeTimestamp: true, stackDepth: 5 })
       const config = getConfig()
-      expect(config.format).toBe("minimal")
-      expect(config.colors).toBe(false)
+      expect(config.includeTimestamp).toBe(true)
+      expect(config.stackDepth).toBe(5)
       // Other options remain default
       expect(config.includeStack).toBe(false)
-      expect(config.stackDepth).toBe(10)
     })
 
     it("should allow multiple configure calls", () => {
-      configure({ format: "json" })
-      configure({ colors: false })
+      configure({ includeStack: true })
+      configure({ stackDepth: 3 })
       const config = getConfig()
-      expect(config.format).toBe("json")
-      expect(config.colors).toBe(false)
+      expect(config.includeStack).toBe(true)
+      expect(config.stackDepth).toBe(3)
+    })
+
+    it("should ignore explicitly undefined options", () => {
+      configure({ includeStack: undefined })
+      expect(getConfig().includeStack).toBe(false)
+    })
+  })
+
+  describe("configure() disposer", () => {
+    it("restores the configuration in effect before the call", () => {
+      configure({ stackDepth: 7 })
+      const restore = configure({ includeTimestamp: true, stackDepth: 20 })
+      expect(getConfig()).toEqual({
+        includeStack: false,
+        includeTimestamp: true,
+        stackDepth: 20,
+      })
+      restore()
+      expect(getConfig()).toEqual({
+        includeStack: false,
+        includeTimestamp: false,
+        stackDepth: 7,
+      })
+    })
+
+    it("unwinds nested scopes in reverse order", () => {
+      const outer = configure({ includeStack: true })
+      const inner = configure({ includeTimestamp: true })
+      inner()
+      expect(getConfig().includeStack).toBe(true)
+      expect(getConfig().includeTimestamp).toBe(false)
+      outer()
+      expect(getConfig().includeStack).toBe(false)
+    })
+
+    it("is safe to call more than once", () => {
+      const restore = configure({ includeTimestamp: true })
+      restore()
+      restore()
+      expect(getConfig().includeTimestamp).toBe(false)
     })
   })
 
   describe("resetConfig", () => {
     it("should restore default configuration", () => {
-      configure({ format: "json", includeStack: true, stackDepth: 50 })
+      configure({ includeTimestamp: true, includeStack: true, stackDepth: 50 })
       resetConfig()
-      const config = getConfig()
-      expect(config.format).toBe("pretty")
-      expect(config.includeStack).toBe(false)
-      expect(config.stackDepth).toBe(10)
+      expect(getConfig()).toEqual({
+        includeStack: false,
+        includeTimestamp: false,
+        stackDepth: 10,
+      })
     })
   })
 })
 
-describe("Configuration Format Options", () => {
+describe("Removed format and colors options (0.4.0)", () => {
   afterEach(() => {
     resetConfig()
   })
 
-  it("should accept 'pretty' format", () => {
-    configure({ format: "pretty" })
-    expect(getConfig().format).toBe("pretty")
-  })
-
-  it("should accept 'json' format", () => {
+  it("are type errors and are ignored at runtime", () => {
+    // @ts-expect-error - format was removed in 0.4.0
     configure({ format: "json" })
-    expect(getConfig().format).toBe("json")
+    // @ts-expect-error - colors was removed in 0.4.0
+    configure({ colors: false })
+    const config = getConfig() as Record<string, unknown>
+    expect("format" in config).toBe(false)
+    expect("colors" in config).toBe(false)
   })
 
-  it("should accept 'minimal' format", () => {
-    configure({ format: "minimal" })
-    expect(getConfig().format).toBe("minimal")
+  it("are ignored in per-set configuration", () => {
+    // @ts-expect-error - format was removed in 0.4.0
+    const Quiet = errorSet("RemovedOptions", ["a"]).init({ format: "json" })
+    expect(String(Quiet.a`A`)).toBe("RemovedOptions.a: A")
   })
 })
 

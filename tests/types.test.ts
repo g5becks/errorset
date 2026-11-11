@@ -4,12 +4,14 @@
  */
 
 import { describe, expect, it } from "bun:test"
-import { ERR, errorSet, isErr } from "../src/index.ts"
+import { ERR, ERR_PROTOCOL, errorSet, isErr } from "../src/index.ts"
+import { errCause } from "./support/err-cause.ts"
 
 describe("ERR Symbol", () => {
-  it("should be a unique symbol", () => {
+  it("should be the registry symbol shared by every copy of errorset", () => {
     expect(typeof ERR).toBe("symbol")
-    expect(ERR.description).toBe("err")
+    expect(ERR.description).toBe("@takinprofit/errorset/err")
+    expect(ERR === Symbol.for("@takinprofit/errorset/err")).toBe(true)
   })
 
   it("should not equal other symbols with same description", () => {
@@ -29,7 +31,8 @@ describe("Err Type Structure", () => {
   it("should have required ERR brand property", () => {
     const err = UserError.not_found`User ${"id"} not found`({ id: "123" })
     expect(ERR in err).toBe(true)
-    expect(err[ERR]).toBe(true)
+    expect(err[ERR]).toBe(ERR_PROTOCOL)
+    expect(ERR_PROTOCOL).toBe(1)
   })
 
   it("should have required kind property", () => {
@@ -59,7 +62,7 @@ describe("Err Type Structure", () => {
       { cause }
     )
     expect(err.cause).toBeDefined()
-    expect(err.cause?.kind).toBe("suspended")
+    expect(errCause(err.cause).kind).toBe("suspended")
   })
 
   it("should not have cause when not provided", () => {
@@ -112,6 +115,13 @@ describe("isErr Helper", () => {
     expect(isErr({ [ERR]: false, kind: "test", message: "test" })).toBe(false)
   })
 
+  it("should return false for a brand with an unknown protocol", () => {
+    expect(isErr({ [ERR]: true, kind: "test", message: "test" })).toBe(false)
+    expect(
+      isErr({ [ERR]: ERR_PROTOCOL + 1, kind: "test", message: "test" })
+    ).toBe(false)
+  })
+
   it("should return false for primitives", () => {
     expect(isErr("error")).toBe(false)
     expect(isErr(123)).toBe(false)
@@ -121,5 +131,20 @@ describe("isErr Helper", () => {
   it("should return false for arrays", () => {
     expect(isErr([])).toBe(false)
     expect(isErr([ERR, "not_found"])).toBe(false)
+  })
+})
+
+describe("public entry", () => {
+  it("does not export the internal helpers (removed in 0.4.0)", async () => {
+    const api = await import("../src/index.ts")
+    const names = Object.keys(api)
+    for (const internal of [
+      "createKindFunction",
+      "createSetGuard",
+      "createSetGuardWithKinds",
+    ]) {
+      expect(names).not.toContain(internal)
+    }
+    expect(names).toContain("errorSet")
   })
 })

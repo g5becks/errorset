@@ -5,6 +5,7 @@
 
 import { describe, expect, it } from "bun:test"
 import { errorSet, isErr } from "../src/index.ts"
+import { errCause } from "./support/err-cause.ts"
 
 describe("errorSet Factory", () => {
   type User = { id: string; name: string; email: string }
@@ -225,7 +226,7 @@ describe("errorSet Custom Inspect", () => {
 })
 
 // Folded in from the former tests/playground.test.ts (TASK-050)
-describe("errorSet no-context (callable) errors", () => {
+describe("errorSet no-context errors", () => {
   type BackupContext = {
     bucket: string
     path: string
@@ -250,13 +251,13 @@ describe("errorSet no-context (callable) errors", () => {
 
   it("should allow calling with cause option", () => {
     const causeErr = BackupError.download_failed`Download failed`
-    const err = BackupError.config_invalid`S3 configuration is required`({
+    const err = BackupError.config_invalid`S3 configuration is required`.with({
       cause: causeErr,
     })
 
     expect(err.kind).toBe("config_invalid")
     expect(err.message).toBe("S3 configuration is required")
-    expect(err.cause?.kind).toBe("download_failed")
+    expect(errCause(err.cause).kind).toBe("download_failed")
     expect(isErr(err)).toBe(true)
 
     // Verify the error created via call has its own inspect function
@@ -279,10 +280,9 @@ describe("errorSet no-context (callable) errors", () => {
     expect(isErr(err)).toBe(true)
   })
 
-  it("isErr should now work on callable errors (functions)", () => {
+  it("isErr works on no-context errors, which are plain objects since 0.4.0", () => {
     const err = BackupError.config_invalid`Test error`
-    // The callable error is a function with ERR property
-    expect(typeof err).toBe("function")
+    expect(typeof err).toBe("object")
     expect(isErr(err)).toBe(true)
   })
 
