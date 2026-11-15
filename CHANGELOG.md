@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-15
+
 ### Fixed
 
 - **Guards narrow their own no-context errors out of the false branch.** For a value typed
@@ -155,7 +157,8 @@ Initial release.
 - `recover`, `inspect`, `merge`, `capture` and `captureAsync` helpers, plus iteration over a set's kinds.
 - Error chaining with `cause`, custom debugger output, optional stack capture and global `configure()`.
 
-[Unreleased]: https://github.com/g5becks/errorset/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/g5becks/errorset/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/g5becks/errorset/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/g5becks/errorset/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/g5becks/errorset/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/g5becks/errorset/compare/v0.3.0...v0.3.1
