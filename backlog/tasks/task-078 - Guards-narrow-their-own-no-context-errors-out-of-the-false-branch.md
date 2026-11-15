@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-11-14T23:42:00Z'
-updated_date: '2026-11-14T23:43:00Z'
+updated_date: '2026-11-15T02:34:00Z'
 labels:
   - types
   - bug
@@ -40,4 +40,6 @@ Rejected alternative: a generic predicate (<V>(v: V) => v is Extract<V, own erro
 Type change (CHANGELOG): after a guard on unknown, data is Partial<T> | Record<string, never>; GuardedError of merged guards and recover handler params include the no-context forms. Expectations updated in merge.test-d.ts, interface-entity.test-d.ts:40, kind-keys.test-d.ts:87 (intended, exact types only).
 
 Verification: new type tests 12 errors on main, 0 after. Gate (typecheck, lint, bun test 333 pass 100% coverage, build, test:types, test:consumer, TS 5.9.3 and 6.0.3 for code and type tests): PASS (errorset-release/v0.5.1-work/gate-2.log). agentx temp clone with the packed build: mise run --force typecheck exit 0 (0 errors); core 977 pass, infra 753 pass. README example compiled.
+
+Released (prepared) 2026-11-14: bun run release:prepare 0.5.1 PASS; release commit b91fbcb, annotated local tag v0.5.1 (not pushed); ci-local on the tag PASS (errorset-release/v0.5.1/CI_LOCAL.log); tarball takinprofit-errorset-0.5.1.tgz verified (file list, ESM/CJS consumers on Bun and Node), SHA512SUMS and RELEASE_NOTES.md in errorset-release/v0.5.1/. PR #4 merged with a merge commit (5586a06); v0.5.1 is an ancestor of main. Maintainer: git push origin v0.5.1; cd errorset-release/v0.5.1 && npm publish ./takinprofit-errorset-0.5.1.tgz --access public; gh release create v0.5.1 --verify-tag --title v0.5.1 --notes-file errorset-release/v0.5.1/RELEASE_NOTES.md.
 <!-- SECTION:NOTES:END -->
