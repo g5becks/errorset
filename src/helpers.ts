@@ -4,7 +4,7 @@
  */
 
 import { type Err, hasBrand } from "./brand.ts"
-import type { SetGuard } from "./guards.ts"
+import type { SetErr, SetGuard } from "./guards.ts"
 
 /**
  * Handler function type for recover.
@@ -40,6 +40,19 @@ export type RecoverHandlers<
     })
 
 /**
+ * Handlers are typed with the context form of an error. A no-context error is the
+ * same value with empty `data`; for any concrete entity type it is assignable to
+ * that form, but TypeScript can't show it for a generic `T`.
+ */
+const asHandlerError = <
+  Kinds extends string,
+  T extends object,
+  N extends string,
+>(
+  error: SetErr<Kinds, T, N>
+): Err<Kinds, Partial<T>, N> => error as Err<Kinds, Partial<T>, N>
+
+/**
  * Provides expression-style error handling with guaranteed recovery.
  *
  * Returns the success value unchanged if not an error of the guard's set.
@@ -67,7 +80,7 @@ export function recover<
   R,
   N extends string = string,
 >(
-  value: Success | Err<Kinds, Partial<T>, N>,
+  value: Success | SetErr<Kinds, T, N>,
   guard: SetGuard<Kinds, T, N>,
   handlers: RecoverHandlers<Kinds, T, R, N>
 ): Success | R {
@@ -86,7 +99,7 @@ export function recover<
   >
   const handler = byKind[kind] ?? byKind._
   if (handler !== undefined) {
-    return handler(error)
+    return handler(asHandlerError(error))
   }
 
   // Unreachable from typed code: RecoverHandlers requires every kind or a "_" catch-all.
@@ -146,7 +159,7 @@ export function inspect<
   T extends object,
   N extends string = string,
 >(
-  value: Success | Err<Kinds, Partial<T>, N>,
+  value: Success | SetErr<Kinds, T, N>,
   guard: SetGuard<Kinds, T, N>,
   handlers: InspectHandlers<Kinds, T, N>
 ): void {
@@ -162,7 +175,7 @@ export function inspect<
   // Call specific handler if provided
   const handler = handlers[kind]
   if (handler !== undefined) {
-    handler(error)
+    handler(asHandlerError(error))
   }
   // No handler for this kind - that's fine, do nothing
 }

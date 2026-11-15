@@ -10,6 +10,7 @@ import {
   type GuardedError,
   type MergedGuard,
   merge,
+  type NoContextErr,
 } from "../../src/index.ts"
 
 type Order = { orderId: string; symbol: string }
@@ -39,22 +40,28 @@ type AccountErr = Err<"locked", Partial<Account>, "AccountError">
 
 const Trading = merge(OrderError, PositionError, AccountError)
 type TradingErr = OrderErr | PositionErr | AccountErr
+// Guards also accept each set's no-context errors (0.5.1)
+type TradingNoContextErr =
+  | NoContextErr<"invalid_symbol" | "rejected", "OrderError">
+  | NoContextErr<"invalid_symbol" | "fetch_failed", "PositionError">
+  | NoContextErr<"locked", "AccountError">
+type TradingGuarded = TradingErr | TradingNoContextErr
 
 // The merged guard narrows to the union of the sets' error types, however it is built
-expectTypeOf<GuardedError<typeof Trading>>().toEqualTypeOf<TradingErr>()
-expectTypeOf(Trading).toExtend<MergedGuard<TradingErr>>()
-expectTypeOf<MergedGuard<TradingErr>>().toExtend<typeof Trading>()
+expectTypeOf<GuardedError<typeof Trading>>().toEqualTypeOf<TradingGuarded>()
+expectTypeOf(Trading).toExtend<MergedGuard<TradingGuarded>>()
+expectTypeOf<MergedGuard<TradingGuarded>>().toExtend<typeof Trading>()
 expectTypeOf<
   GuardedError<
     ReturnType<
       typeof OrderError.merge<[typeof PositionError, typeof AccountError]>
     >
   >
->().toEqualTypeOf<TradingErr>()
+>().toEqualTypeOf<TradingGuarded>()
 const chained = merge(merge(OrderError, PositionError), AccountError)
-expectTypeOf<GuardedError<typeof chained>>().toEqualTypeOf<TradingErr>()
+expectTypeOf<GuardedError<typeof chained>>().toEqualTypeOf<TradingGuarded>()
 const viaMethod = OrderError.merge(PositionError).merge(AccountError)
-expectTypeOf<GuardedError<typeof viaMethod>>().toEqualTypeOf<TradingErr>()
+expectTypeOf<GuardedError<typeof viaMethod>>().toEqualTypeOf<TradingGuarded>()
 expectTypeOf(Trading.kinds).toEqualTypeOf<
   readonly ("invalid_symbol" | "rejected" | "fetch_failed" | "locked")[]
 >()
@@ -78,7 +85,8 @@ const all = Trading.recover(value, {
   OrderError: {
     invalid_symbol: e => {
       expectTypeOf(e).toEqualTypeOf<
-        Err<"invalid_symbol", Partial<Order>, "OrderError">
+        | Err<"invalid_symbol", Partial<Order>, "OrderError">
+        | Err<"invalid_symbol", Record<string, never>, "OrderError">
       >()
       return 1
     },
@@ -86,7 +94,9 @@ const all = Trading.recover(value, {
   },
   PositionError: {
     invalid_symbol: e => {
-      expectTypeOf(e.data).toEqualTypeOf<Partial<Position>>()
+      expectTypeOf(e.data).toEqualTypeOf<
+        Partial<Position> | Record<string, never>
+      >()
       return 3
     },
     fetch_failed: () => 4,
@@ -99,7 +109,7 @@ expectTypeOf(all).toEqualTypeOf<Order | Position | number>()
 const partial = Trading.recover(value, {
   PositionError: { fetch_failed: () => "retry" },
   _: e => {
-    expectTypeOf(e).toEqualTypeOf<OrderErr | PositionErr | AccountErr>()
+    expectTypeOf(e).toEqualTypeOf<TradingGuarded>()
     return "fail"
   },
 })

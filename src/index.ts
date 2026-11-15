@@ -25,6 +25,7 @@ export {
   resetConfig,
 } from "./config.ts"
 export type {
+  SetErr,
   SetGuard,
   SetGuardWithKinds,
 } from "./guards.ts"

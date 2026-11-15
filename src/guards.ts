@@ -4,6 +4,18 @@
  */
 
 import { ERR, ERR_PROTOCOL, type Err, hasBrand } from "./brand.ts"
+import type { NoContextErr } from "./types.ts"
+
+/**
+ * The errors a set's guard accepts: errors with context and the set's no-context
+ * errors. `NoContextErr` is named because TypeScript only removes a union member
+ * from a guard's false branch when it is a subtype of the predicate type, and
+ * `NoContextErr` (data `Record<string, never>`, which lacks the entity's
+ * optional keys) is not a subtype of `Err<Kinds, Partial<T>, N>`.
+ */
+export type SetErr<Kinds extends string, T extends object, N extends string> =
+  | Err<Kinds, Partial<T>, N>
+  | NoContextErr<Kinds, N>
 
 /**
  * Type for the set-level guard function.
@@ -13,7 +25,7 @@ export type SetGuard<
   Kinds extends string,
   T extends object,
   N extends string = string,
-> = ((value: unknown) => value is Err<Kinds, Partial<T>, N>) & {
+> = ((value: unknown) => value is SetErr<Kinds, T, N>) & {
   /** Symbol.hasInstance for instanceof support */
   [Symbol.hasInstance](value: unknown): value is Err<Kinds, Partial<T>, N>
 }
