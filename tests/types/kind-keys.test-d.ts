@@ -84,5 +84,8 @@ errorSet("Reserved", { ok: [], recover: [] })
 // The array form is unchanged
 const Plain = errorSet("Plain", ["not_found"]).init<User>()
 if (Plain.not_found(value)) {
-  expectTypeOf(value.data).toEqualTypeOf<Partial<User>>()
+  // Partial<User>, or the empty data of a no-context error (0.5.1)
+  expectTypeOf(value.data).toEqualTypeOf<
+    Partial<User> | Record<string, never>
+  >()
 }

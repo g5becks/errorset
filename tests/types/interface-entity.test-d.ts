@@ -34,10 +34,13 @@ expectTypeOf(AccountError.not_found`${"missing"}`).toBeFunction()
 // @ts-expect-error - balance must be a number
 AccountError.overdrawn`Balance ${"balance"}`({ balance: "5" })
 
-// Kind guards narrow data to Partial<Account>
+// Kind guards narrow data to Partial<Account>, or the empty data of a
+// no-context error (0.5.1: kinds without declared keys may be no-context)
 declare const value: unknown
 if (AccountError.not_found(value)) {
-  expectTypeOf(value.data).toEqualTypeOf<Partial<Account>>()
+  expectTypeOf(value.data).toEqualTypeOf<
+    Partial<Account> | Record<string, never>
+  >()
   expectTypeOf(value.kind).toEqualTypeOf<"not_found">()
 }
 

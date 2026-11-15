@@ -245,7 +245,10 @@ export type KindGuard<
   T extends object,
   N extends string = string,
   Declared extends { readonly keys: string } | undefined = undefined,
-> = (value: unknown) => value is Err<Kind, KindData<T, Declared>, N>
+> = (value: unknown) => value is Declared extends undefined
+  ? // A kind without declared keys may be created without context
+    Err<Kind, KindData<T, Declared>, N> | NoContextErr<Kind, N>
+  : Err<Kind, KindData<T, Declared>, N>
 
 /**
  * Dual-purpose kind function that acts as both:

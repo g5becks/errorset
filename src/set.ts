@@ -5,7 +5,11 @@
 
 import type { Err } from "./brand.ts"
 import { rehydrators } from "./creation.ts"
-import { createSetGuardWithKinds, type SetGuardWithKinds } from "./guards.ts"
+import {
+  createSetGuardWithKinds,
+  type SetErr,
+  type SetGuardWithKinds,
+} from "./guards.ts"
 import {
   captureAsync,
   captureSync,
@@ -151,7 +155,7 @@ export type ErrorSet<
    * Expression-style error handling with guaranteed recovery.
    */
   recover<Success, R>(
-    value: Success | Err<Kinds, Partial<T>, N>,
+    value: Success | SetErr<Kinds, T, N>,
     handlers: RecoverHandlers<Kinds, T, R, N>
   ): Success | R
 
@@ -159,7 +163,7 @@ export type ErrorSet<
    * Observe errors without changing type or control flow.
    */
   inspect<Success>(
-    value: Success | Err<Kinds, Partial<T>, N>,
+    value: Success | SetErr<Kinds, T, N>,
     handlers: InspectHandlers<Kinds, T, N>
   ): void
 
@@ -168,7 +172,7 @@ export type ErrorSet<
    */
   merge<G extends MergeInput[]>(
     ...others: G
-  ): MergedGuard<Err<Kinds, Partial<T>, N> | GuardedError<G[number]>>
+  ): MergedGuard<SetErr<Kinds, T, N> | GuardedError<G[number]>>
 
   /**
    * Wrap synchronous throwing code.
@@ -333,7 +337,7 @@ export function errorSet<N extends string>(
       // Attach recover method bound to this guard
       Object.defineProperty(errorSetObj, "recover", {
         value: <Success, R>(
-          value: Success | Err<string, Partial<T>, N>,
+          value: Success | SetErr<string, T, N>,
           handlers: RecoverHandlers<string, T, R, N>
         ): Success | R => recover(value, guard, handlers),
         writable: false,
@@ -344,7 +348,7 @@ export function errorSet<N extends string>(
       // Attach inspect method bound to this guard
       Object.defineProperty(errorSetObj, "inspect", {
         value: <Success>(
-          value: Success | Err<string, Partial<T>, N>,
+          value: Success | SetErr<string, T, N>,
           handlers: InspectHandlers<string, T, N>
         ): void => inspect(value, guard, handlers),
         writable: false,

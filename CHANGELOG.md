@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-15
+
+### Fixed
+
+- **Guards narrow their own no-context errors out of the false branch.** For a value typed
+  `T | NoContextErr<"not_found", "StoreError">`, `if (!StoreError(value))` kept the
+  no-context error in the false branch (TS2322 when assigning to `T`), although the guard
+  returns `true` for it at runtime. The same applied to kind guards (`StoreError.not_found`),
+  merged guards (`merge(...)` and `.merge(...)`) and to the result type of `recover`.
+  TypeScript removes a union member from a false branch only when it is a subtype of the
+  guard's predicate type, and `NoContextErr` (whose `data` is `Record<string, never>`) is not
+  a subtype of `Err<Kind, Partial<T>, Set>`. Set guards now narrow to the new `SetErr` type
+  (`Err<Kinds, Partial<T>, Set> | NoContextErr<Kinds, Set>`), and kind guards of kinds without
+  declared keys also name `NoContextErr`. Runtime behavior is unchanged.
+
+  ```ts
+  const r = find(id) // User | NoContextErr<"not_found", "StoreError">
+  if (!StoreError(r)) {
+    const user: User = r // before: TS2322; now: OK
+  }
+  ```
+
+  **Type change:** after a guard on an `unknown` value, `data` is
+  `Partial<T> | Record<string, never>` instead of `Partial<T>`, and
+  `GuardedError<typeof merged>` and `recover` handler parameters include the no-context
+  forms. Reading a key (`e.data.id`) gives the same type as before, and a no-context error
+  stays assignable to `Err<Kind, Partial<T>, Set>`. Only code that compares these types
+  exactly (type tests) needs updating. Kind guards of kinds with declared keys are
+  unchanged. `instanceof` narrowing (`Symbol.hasInstance`) is unchanged.
+
 ## [0.5.0] - 2026-11-11
 
 ### Breaking changes
@@ -127,7 +157,8 @@ Initial release.
 - `recover`, `inspect`, `merge`, `capture` and `captureAsync` helpers, plus iteration over a set's kinds.
 - Error chaining with `cause`, custom debugger output, optional stack capture and global `configure()`.
 
-[Unreleased]: https://github.com/g5becks/errorset/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/g5becks/errorset/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/g5becks/errorset/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/g5becks/errorset/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/g5becks/errorset/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/g5becks/errorset/compare/v0.3.0...v0.3.1

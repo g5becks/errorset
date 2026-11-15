@@ -133,8 +133,9 @@ if (UserError(result)) { ... }
 ### Exact Data per Kind
 
 With an array of kinds, a kind guard can't know which fields a kind's errors carry, so it
-narrows `data` to `Partial<T>`. Declare each kind's data keys instead, and kind guards narrow
-`data` to exactly those keys:
+narrows `data` to `Partial<T>` (or `Record<string, never>`, the empty data of a no-context
+error). Declare each kind's data keys instead, and kind guards narrow `data` to exactly those
+keys:
 
 ```typescript
 const UserError = errorSet("UserError", {
@@ -239,8 +240,20 @@ return UserError.invalid`Invalid user data`;
 return UserError.invalid`Invalid user data`.with({ cause: previousError });
 ```
 
-Errors without template holes are plain error objects (`NoContextErr`), like every other error:
-they serialize with `JSON.stringify` and can be sent through `structuredClone`, `postMessage`
+Errors without template holes are plain error objects (`NoContextErr`), like every other error.
+Set, kind and merged guards accept them, so a guard's false branch excludes them too:
+
+```typescript
+const find = (id: string): User | NoContextErr<"not_found", "UserError"> =>
+  users.get(id) ?? UserError.not_found`User not found`
+
+const user = find("u1")
+if (!UserError(user)) {
+  user.name // user is User here
+}
+```
+
+No-context errors serialize with `JSON.stringify` and can be sent through `structuredClone`, `postMessage`
 and worker or IPC boundaries. A structured clone carries the data (`set`, `kind`, `message`,
 `data`, `cause`) but not the brand symbol, so guards don't recognize the clone until you
 rehydrate it with [`from()`](#rehydration-from).
